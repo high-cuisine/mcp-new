@@ -88,3 +88,5 @@ mcp-server/dist/
 
 mongo_data
 redis_data
+# Ignore empty submodule placeholder until upstream has commits
+external/mcp-new/
