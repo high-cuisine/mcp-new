@@ -86,3 +86,5 @@ test/node_modules/
 mcp-server/dist/
 **/*.log
 
+mongo_data
+redis_data
