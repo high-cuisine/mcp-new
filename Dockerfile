@@ -6,14 +6,14 @@ WORKDIR /app
 # ENV PUPPETEER_SKIP_DOWNLOAD=true
 # ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
-# Install Chromium and required fonts/SSL libs
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont
+# # Install Chromium and required fonts/SSL libs
+# RUN apk add --no-cache \
+#     chromium \
+#     nss \
+#     freetype \
+#     harfbuzz \
+#     ca-certificates \
+#     ttf-freefont
 
 # Копируем файлы зависимостей
 COPY package*.json ./
