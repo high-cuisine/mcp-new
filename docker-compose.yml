@@ -1,17 +1,17 @@
 services:
-  # mcp:
-  #   build: .
-  #   container_name: mcp
-  #   ports:
-  #     - 8080:8080
-  #   environment:
-  #     - MCP_HOST=0.0.0.0
-  #     - MCP_PORT=8080
-  #   volumes:
-  #     - ./mcp_data:/data/mcp
-  #   depends_on:
-  #     - mongo
-  #     - redis
+  mcp:
+    build: .
+    container_name: mcp
+    ports:
+      - 8080:8080
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8080
+    volumes:
+      - ./mcp_data:/data/mcp
+    depends_on:
+      - mongo
+      - redis
   mongo:
     image: mongo:latest
     ports:

@@ -3,19 +3,24 @@
     {
       "id": "1042650482:1042650482",
       "data": {
-        "__scenes": {},
+        "__scenes": {
+          "current": "show_appointment",
+          "state": {}
+        },
         "createAppointment": {
           "step": "clinic",
           "symptoms": "лежит",
-          "petName": "Савелий, кот",
-          "petBreed": "британская",
-          "ownerPhone": "+79658879405",
+          "petName": "Савелий",
+          "petBreed": "британец",
+          "ownerPhone": "+79658879403",
           "ownerName": "н н н",
           "appointmentType": "primary",
-          "date": "2025-10-29",
-          "time": "09:00",
+          "date": "2025-11-03",
+          "time": "14:00",
           "clinicId": "clinic_1",
-          "doctorId": "5"
+          "doctorId": "5",
+          "needToCreateClient": true,
+          "needToCreatePet": true
         },
         "cancelAppointment": {
           "step": "confirm_cancel",
@@ -699,6 +704,133 @@
           "selectedAppointmentId": "19208",
           "newDate": "2025-11-03",
           "newTime": "13:00"
+        },
+        "showAppointment": {
+          "step": "show_appointments",
+          "phone": "+79658879403",
+          "client": {
+            "client_id": 7090,
+            "last_name": "н",
+            "first_name": "н",
+            "middle_name": "н",
+            "email": "",
+            "address": "",
+            "in_blacklist": 0,
+            "description": "",
+            "balance": "0.0000000000",
+            "type": null,
+            "cell_phone": "9658879403",
+            "status": "TEMPORARY",
+            "apartment": "",
+            "phone_prefix": "",
+            "city_id": null,
+            "city_title": null,
+            "city_type_id": null,
+            "street_id": null,
+            "street_title": null,
+            "street_type": null,
+            "clinic_phone_prefix": "7",
+            "pets": [
+              {
+                "pet_id": 8188,
+                "alias": "Савелий",
+                "sex": "unknown",
+                "birthday": null,
+                "owner_id": 7090,
+                "pet_type": "cat",
+                "breed": "Британская",
+                "pet_type_title": "Кошки",
+                "pet_type_id": 1
+              }
+            ]
+          },
+          "appointments": [
+            {
+              "id": 19400,
+              "admission_date": "2025-11-03 14:00:00",
+              "description": "Питомец: Савелий\nСимптомы: лежит\nВладелец: н н н\nТелефон: +79658879403",
+              "client_id": 7090,
+              "patient_id": 8188,
+              "user_id": 5,
+              "type_id": 1,
+              "admission_length": "00:00:30",
+              "status": "not_confirmed",
+              "clinic_id": 1,
+              "direct_direction": 0,
+              "creator_id": 0,
+              "create_date": "2025-10-29 12:39:41",
+              "escorter_id": 0,
+              "reception_write_channel": "not_confirmed",
+              "is_auto_create": 0,
+              "invoices_sum": "0.0000000000",
+              "confirmation": "",
+              "pet": {
+                "id": 8188,
+                "owner_id": 7090,
+                "type_id": 1,
+                "alias": "Савелий",
+                "sex": "unknown",
+                "date_register": "2025-10-29 12:39:40",
+                "birthday": null,
+                "note": "",
+                "breed_id": 28,
+                "old_id": null,
+                "color_id": null,
+                "deathnote": null,
+                "deathdate": null,
+                "chip_number": "",
+                "lab_number": "",
+                "status": "alive",
+                "picture": null,
+                "weight": "0.0000000000",
+                "edit_date": "2025-10-29 12:39:40",
+                "pet_type_data": {
+                  "id": 1,
+                  "title": "Кошки",
+                  "picture": "cat",
+                  "type": "cat"
+                },
+                "breed_data": {
+                  "id": 28,
+                  "title": "Британская",
+                  "pet_type_id": 1
+                }
+              },
+              "client": {
+                "id": 7090,
+                "address": "",
+                "home_phone": "",
+                "work_phone": "",
+                "note": "",
+                "type_id": null,
+                "how_find": null,
+                "balance": "0.0000000000",
+                "email": "",
+                "city": "",
+                "city_id": null,
+                "date_register": "2025-10-29 12:39:39",
+                "cell_phone": "9658879403",
+                "zip": "",
+                "registration_index": null,
+                "vip": 0,
+                "last_name": "н",
+                "first_name": "н",
+                "middle_name": "н",
+                "status": "TEMPORARY",
+                "discount": 0,
+                "passport_series": "",
+                "lab_number": "",
+                "street_id": 0,
+                "apartment": "",
+                "unsubscribe": 0,
+                "in_blacklist": 0,
+                "last_visit_date": "0000-00-00 00:00:00",
+                "number_of_journal": "",
+                "phone_prefix": ""
+              },
+              "wait_time": ""
+            }
+          ]
         }
       }
     },
