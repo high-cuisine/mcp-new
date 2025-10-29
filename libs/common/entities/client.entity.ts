@@ -1,0 +1,32 @@
+export interface Client {
+    id: string;
+    address: string;
+    home_phone: string;
+    work_phone: string;
+    note: string;
+    type_id: string | null;
+    how_find: string | null;
+    balance: string;
+    email: string;
+    city: string;
+    city_id: string;
+    date_register: string;
+    cell_phone: string;
+    zip: string;
+    registration_index: string | null;
+    vip: string;
+    last_name: string;
+    first_name: string;
+    middle_name: string;
+    status: string;
+    discount: string;
+    passport_series: string;
+    lab_number: string;
+    street_id: string;
+    apartment: string;
+    unsubscribe: string;
+    in_blacklist: string;
+    last_visit_date: string;
+    number_of_journal: string;
+    phone_prefix: string;
+}
