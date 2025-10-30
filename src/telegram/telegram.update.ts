@@ -102,6 +102,10 @@ export class BotUpdate {
     @On('message')
     async onMessage(@Ctx() ctx: SceneContext) {
         console.log('Message received:', ctx.message);
+        // Если пользователь находится в сцене, не отправляем сообщение в общий обработчик
+        if ((ctx.scene as any)?.current) {
+            return;
+        }
         await this.telegramService.sendMessage(ctx);
     }
 

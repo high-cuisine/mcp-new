@@ -19,7 +19,12 @@ export class TelegramService {
         private readonly proccesorService: ProccesorService,
     private readonly crmService: CrmService
     ) {
-        
+        this.getMe();
+    }
+
+    async getMe() {
+        const me = await this.bot.telegram.getMe();
+        console.log(me);
     }
 
     async sendMessage(ctx: SceneContext) {

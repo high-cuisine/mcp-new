@@ -1,28 +1,22 @@
-FROM node:alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
-# # Puppeteer on Alpine arm64: use system Chromium and skip bundled download
-# ENV PUPPETEER_SKIP_DOWNLOAD=true
-# ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# Избегаем скачивания Chromium для puppeteer (arm64 + Alpine)
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV NODE_ENV=production
 
-# # Install Chromium and required fonts/SSL libs
-# RUN apk add --no-cache \
-#     chromium \
-#     nss \
-#     freetype \
-#     harfbuzz \
-#     ca-certificates \
-#     ttf-freefont
-
-# Копируем файлы зависимостей
+# Копируем файлы зависимостей и устанавливаем только прод-зависимости
 COPY package*.json ./
+RUN npm ci --omit=dev
 
-# Очищаем кеш npm и устанавливаем зависимости
-RUN npm cache clean --force && \
-    npm install
-
-# Копируем остальные файлы
+# Копируем исходники и .env
 COPY . .
 
-CMD ["npm", "run", "start"]
+# Сборка NestJS (в dist/)
+RUN npm run build
+
+EXPOSE 3000
+
+# Запуск продакшн-сборки
+CMD ["node", "dist/main.js"]
