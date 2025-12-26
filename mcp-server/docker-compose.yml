@@ -8,15 +8,29 @@ services:
       - ./mcp_data:/data/mcp
       - ./libs/infractructure/rag/questions:/app/knowledge_base
     depends_on:
-      - mongo
-      - redis
-      - chromadb
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      chromadb:
+        condition: service_started
     networks:
       - telegram-network
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     environment:
       - PORT=8080
       - CHROMA_PATH=http://chromadb:8000
       - CSV_KNOWLEDGE_BASE_PATH=/app/knowledge_base
+      - MONGODB_HOST=mongo
+      - MONGODB_PORT=27017
+      - MONGODB_USERNAME=admin
+      - MONGODB_PASSWORD=admin
+      - MONGODB_DB_NAME=mcp
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=admin
   mongo:
     image: mongo:latest
     ports:
@@ -28,7 +42,12 @@ services:
       - ./mongo_data:/data/db
     networks:
       - telegram-network
-
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "--quiet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     depends_on:
       - redis
   redis:
@@ -41,6 +60,11 @@ services:
       - ./redis_data:/data
     networks:
       - telegram-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   chromadb:
     image: chromadb/chroma:latest
     container_name: chromadb
