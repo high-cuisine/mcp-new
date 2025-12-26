@@ -1,0 +1,21 @@
+services:
+  wa-bot:
+    build: .
+    container_name: wa-bot
+    restart: on-failure
+    stdin_open: true
+    tty: true
+    ports:
+      - 6800:6800
+    environment:
+     
+      PORT: "${PORT:-6800}"
+    volumes:
+      - ./data:/app/data
+    networks:
+      - telegram-network
+
+networks:
+  telegram-network:
+    name: telegram-network
+    external: true

@@ -1,0 +1,14 @@
+services:
+  wa-bot:
+    build: .
+    container_name: wa-ping-bot
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: "info"
+      AUTH_DIR: "/data/auth"
+      STORE_FILE: "/data/store/baileys_store.json"
+      SAVE_INTERVAL_MS: "60000"
+    volumes:
+      - ./auth:/data/auth
+      - ./store:/data/store
+    tty: true

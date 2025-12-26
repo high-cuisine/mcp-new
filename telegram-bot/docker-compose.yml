@@ -1,0 +1,22 @@
+services:
+  telegram-userbot:
+    build: .
+    container_name: telegram-userbot
+    restart: on-failure
+    stdin_open: true
+    tty: true
+    ports:
+      - 3507:3507
+    environment:
+      TELEGRAM_API_ID: "${TELEGRAM_API_ID}"
+      TELEGRAM_API_HASH: "${TELEGRAM_API_HASH}"
+      TELEGRAM_PHONE_NUMBER: "${TELEGRAM_PHONE_NUMBER}"
+      TELEGRAM_SESSION_FILE: "/data/session.txt"
+    volumes:
+      - ./data:/data
+    networks:
+      - telegram-network
+networks:
+  telegram-network:
+    name: telegram-network
+    driver: bridge

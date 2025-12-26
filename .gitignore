@@ -1,0 +1,27 @@
+# Env files
+.env
+.env.*
+!env.example
+
+# Service-specific envs
+mcp-server/.env
+mcp-server/.env.*
+
+# Sensitive test/session data
+test/auth/
+what/data/session-default/
+
+# Local databases and artifacts
+mcp-server/mongo_data/
+mcp-server/redis_data/
+
+# Node modules
+node_modules/
+mcp-server/node_modules/
+what/node_modules/
+test/node_modules/
+
+# Build outputs
+mcp-server/dist/
+**/*.log
+
