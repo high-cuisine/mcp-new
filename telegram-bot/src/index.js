@@ -16,7 +16,7 @@ app.use(express.static('public'));
 
 const isRunningInsideContainer = fs.existsSync('/.dockerenv');
 const defaultAppURL = isRunningInsideContainer
-  ? 'http://mcp:8080/telegram/send-message'
+  ? 'http://host.docker.internal:3508/telegram/send-message'
   : 'http://localhost:8080/telegram/send-message';
 
 const appURL = process.env.MCP_SERVER_URL ?? defaultAppURL;
