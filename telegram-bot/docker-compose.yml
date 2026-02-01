@@ -5,6 +5,9 @@ services:
     restart: on-failure
     stdin_open: true
     tty: true
+    # На Linux host.docker.internal по умолчанию нет — добавляем вручную
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - 3507:3507
     environment:
