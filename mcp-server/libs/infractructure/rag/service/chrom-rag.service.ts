@@ -13,7 +13,7 @@ export class ChromRagService {
 
     constructor(private readonly initService: ChromRagInitService) {}
 
-    async search(query: string, nResults: number = 3, maxDistance: number = 0.8): Promise<any | null> {
+    async search(query: string, nResults: number = 5, maxDistance: number = 1.15): Promise<any | null> {
         try {
             if (!this.collection) {
                 throw new Error("Collection not initialized. Ensure ChromRagInitService ran on startup.");
@@ -66,6 +66,45 @@ export class ChromRagService {
             };
         } catch (error) {
             console.error("Error searching in ChromaDB:", error);
+            return null;
+        }
+    }
+
+    /**
+     * Возвращает несколько кандидатов из базы знаний (без выбора лучшего).
+     * Используется для последующей фильтрации релевантности через LLM.
+     */
+    async searchCandidates(
+        query: string,
+        nResults: number = 8,
+        maxDistance: number = 1.4,
+    ): Promise<Array<{ document: string; metadata: Record<string, unknown>; distance: number }> | null> {
+        try {
+            if (!this.collection) {
+                throw new Error("Collection not initialized. Ensure ChromRagInitService ran on startup.");
+            }
+
+            const results = await this.collection.query({
+                queryTexts: [query],
+                nResults: nResults,
+            });
+
+            if (!results?.documents?.[0]?.length) {
+                return null;
+            }
+
+            const candidates = results.documents[0]
+                .map((doc: string, index: number) => ({
+                    document: doc,
+                    metadata: results.metadatas?.[0]?.[index] || {},
+                    distance: results.distances?.[0]?.[index] ?? 1,
+                }))
+                .filter((r: { distance: number }) => r.distance <= maxDistance)
+                .sort((a: { distance: number }, b: { distance: number }) => a.distance - b.distance);
+
+            return candidates.length > 0 ? candidates : null;
+        } catch (error) {
+            console.error("Error searching candidates in ChromaDB:", error);
             return null;
         }
     }

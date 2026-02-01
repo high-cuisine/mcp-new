@@ -20,6 +20,7 @@ import { wordPrompt } from "../constants/helpingPrompts/word.prompt";
 import { RedisService } from "@infra/redis/redis.service";
 import { checkingToExitFromScenePrompt } from "../constants/technicalPrompt/checkingToExitFromScene.prompt";
 import { ClientRepository } from "src/client/repositorys/client.repository";
+import { ragRelevancePrompt } from "../constants/helpingPrompts/ragRelevance.prompt";
 
 @Injectable()
 export class ProccesorService {
@@ -426,15 +427,41 @@ export class ProccesorService {
     }
 
     async useKnowledgeBase(query: string) {
-        const result = await this.chromRagService.search(query);
-        
-        if (!result) {
-            // Вместо веб-рага отправляем запрос модератору
-            // Возвращаем специальный объект, который будет обработан в sendMessage
+        const candidates = await this.chromRagService.searchCandidates(query, 8, 1.4);
+
+        if (!candidates || candidates.length === 0) {
             throw new Error('KNOWLEDGE_BASE_NOT_FOUND');
         }
-        
-        return result.answer;
+
+        const candidatesText = candidates
+            .map((c, i) => {
+                const q = (c.metadata?.question as string) || '';
+                const a = (c.metadata?.answer as string) || c.document || '';
+                return `[${i + 1}] Вопрос: ${q}\nОтвет: ${a}`;
+            })
+            .join('\n\n');
+
+        const prompt = ragRelevancePrompt
+            .replace('{user_question}', query)
+            .replace('{candidates_text}', candidatesText);
+
+        const messagesReq = [
+            { role: 'system', content: prompt },
+            { role: 'user', content: `Вопрос пользователя: ${query}` },
+        ];
+
+        const response = await this.openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: messagesReq as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+            max_tokens: 500,
+            temperature: 0.2,
+        }) as LlmResponseDto;
+
+        const answer = response.choices[0].message.content?.trim();
+        if (!answer) {
+            throw new Error('KNOWLEDGE_BASE_NOT_FOUND');
+        }
+        return answer;
     }
 
     async usePriceSearch(serviceName: string) {
