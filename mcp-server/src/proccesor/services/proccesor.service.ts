@@ -7,17 +7,19 @@ import { ChatMsg } from "../interface/chat.interface";
 import tools from "../tools/tools";
 import toolsAppointmentSlots from "../tools/toolsAppointmentSlots";
 import { LlmResponseDto } from "../dto/llm-response.dto";
-import { findServicePrompt } from "../constants/findService.prompt";
+import { findServicePrompt } from "../constants/helpingPrompts/findService.prompt";
 import { ServicesService } from "src/crm/services/services.service";
 import { DoctorService } from "src/crm/services/doctor.service";
-import { findDoctorPrompt } from "../constants/findDoctorPrompt.prompt";
+import { findDoctorPrompt } from "../constants/helpingPrompts/findDoctorPrompt.prompt";
 import { WebRagService } from "@infra/rag/service/web-rag.service";
 import { ChromRagService } from "@infra/rag/service/chrom-rag.service";
 import { helpPrompt } from "../constants/help.prompt";
 import { ClinicRulesJson } from "../interface/clinic-rules-json.interface";
 import { ClinicRules, ClinicRulesDocument } from "../schemas/clinic-rules.schema";
-import { wordPrompt } from "../constants/word.prompt";
+import { wordPrompt } from "../constants/helpingPrompts/word.prompt";
 import { RedisService } from "@infra/redis/redis.service";
+import { checkingToExitFromScenePrompt } from "../constants/technicalPrompt/checkingToExitFromScene.prompt";
+import { ClientRepository } from "src/client/repositorys/client.repository";
 
 @Injectable()
 export class ProccesorService {
@@ -80,6 +82,7 @@ export class ProccesorService {
         private readonly webRagService: WebRagService,
         private readonly chromRagService: ChromRagService,
         private readonly redisService: RedisService,
+        private readonly clientRepository: ClientRepository,
         @InjectModel(ClinicRules.name) private readonly clinicRulesModel: Model<ClinicRulesDocument>,
     ) {
         this.openai = new OpenAI({
@@ -88,7 +91,7 @@ export class ProccesorService {
 
     }
 
-    async sendMessage(messages: ChatMsg[]) {
+    async sendMessage(messages: ChatMsg[], telegramId?: string) {
         // Валидация сообщений
         const validMessages = messages.filter(msg => msg.role && msg.content).slice(-8);
         
@@ -155,7 +158,7 @@ export class ProccesorService {
 
             return {
                 type: 'text',
-                content: 'Я уточню эту услугу у модератора и вернусь с ответом.',
+                content: 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.',
                 notifyModerator: notifyModeratorText(lastMessage),
             };
         }
@@ -189,14 +192,28 @@ export class ProccesorService {
             if (functionName === 'search_web') {
                 const args = JSON.parse(toolCall.function.arguments);
                 const query = args.query;
-                const webRagResult = await this.useWebRag(query);
-                return { type: 'text', content: webRagResult };
+                // Вместо веб-рага отправляем запрос модератору
+                return {
+                    type: 'text',
+                    content: 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.',
+                    notifyModerator: `❗️ Пользователь задал вопрос, требующий помощи модератора.\nЗапрос: ${query}`
+                };
             }
             
             if (functionName === 'search_knowledge_base') {
                 const args = JSON.parse(toolCall.function.arguments);
                 const query = args.query;
-                const knowledgeResult = await this.useKnowledgeBase(query);
+                let knowledgeResult: string;
+                try {
+                    knowledgeResult = await this.useKnowledgeBase(query);
+                } catch (error) {
+                    // Если не найдено в базе знаний, отправляем запрос модератору
+                    return {
+                        type: 'text',
+                        content: 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.',
+                        notifyModerator: `❗️ Пользователь задал вопрос, требующий помощи модератора.\nЗапрос: ${query}`
+                    };
+                }
                 
                 // Если вопрос об услугах, также ищем цены на эту услугу
                 // Определяем, является ли запрос вопросом об услуге
@@ -237,7 +254,7 @@ export class ProccesorService {
 
                     return {
                         type: 'text',
-                        content: 'Я уточню эту услугу у модератора и вернусь с ответом.',
+                        content: 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.',
                         notifyModerator: notifyModeratorText(lastMessage || query),
                     };
                 }
@@ -259,8 +276,17 @@ export class ProccesorService {
                 const serviceHasPriceIntent = priceIntent || /цена|стоим|сколько стоит|прайс|руб|₽/i.test(serviceName || '');
                 
                 if (!serviceHasPriceIntent) {
-                    const knowledgeResult = await this.useKnowledgeBase(serviceName || lastMessage || '');
-                    return { type: 'text', content: knowledgeResult };
+                    try {
+                        const knowledgeResult = await this.useKnowledgeBase(serviceName || lastMessage || '');
+                        return { type: 'text', content: knowledgeResult };
+                    } catch (error) {
+                        // Если не найдено в базе знаний, отправляем запрос модератору
+                        return {
+                            type: 'text',
+                            content: 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.',
+                            notifyModerator: `❗️ Пользователь задал вопрос, требующий помощи модератора.\nЗапрос: ${serviceName || lastMessage || ''}`
+                        };
+                    }
                 }
 
                 const priceResult = await this.usePriceSearch(serviceName);
@@ -270,7 +296,7 @@ export class ProccesorService {
 
                 return {
                     type: 'text',
-                    content: 'Я уточню эту услугу у модератора и вернусь с ответом.',
+                    content: 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.',
                     notifyModerator: notifyModeratorText(lastMessage || serviceName),
                 };
             }
@@ -292,6 +318,49 @@ export class ProccesorService {
                 
                 const slotsResult = await this.useDoctorAvailableSlots(doctorLastName, date, appointmentType);
                 return { type: 'text', content: slotsResult };
+            }
+            
+            if (functionName === 'call_moderator') {
+                const args = JSON.parse(toolCall.function.arguments);
+                const reason = args.reason || 'Клиент запросил помощь модератора';
+                
+                // Получаем последнее сообщение пользователя
+                const lastUserMessage = validMessages.filter(msg => msg.role === 'user').pop()?.content || '';
+                
+                // Получаем информацию о клиенте, если передан telegramId
+                let clientInfo = '';
+                if (telegramId) {
+                    try {
+                        const client = await this.clientRepository.findByTelegramId(telegramId);
+                        if (client) {
+                            const clientObj = client.toObject ? client.toObject() : (client as any);
+                            clientInfo = `\n\n📋 Информация о клиенте:\n`;
+                            clientInfo += `• Telegram ID: ${telegramId}\n`;
+                            if (clientObj.telegram_name) {
+                                clientInfo += `• Имя: ${clientObj.telegram_name}\n`;
+                            }
+                            if (clientObj.telegram_number) {
+                                clientInfo += `• Телефон: ${clientObj.telegram_number}\n`;
+                            }
+                            if (clientObj.whatsapp_number) {
+                                clientInfo += `• WhatsApp: ${clientObj.whatsapp_number}\n`;
+                            }
+                            if (clientObj.crm_client_id) {
+                                clientInfo += `• CRM ID: ${clientObj.crm_client_id}\n`;
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Ошибка при получении информации о клиенте:', error);
+                    }
+                }
+                
+                const moderatorMessage = `🔔 ВЫЗОВ МОДЕРАТОРА\n\nПричина: ${reason}${lastUserMessage ? `\n\nПоследнее сообщение клиента: "${lastUserMessage}"` : ''}${clientInfo}`;
+                
+                return {
+                    type: 'text',
+                    content: 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.',
+                    notifyModerator: moderatorMessage
+                };
             }
             
             return { type: functionName, content: ''}
@@ -352,7 +421,6 @@ export class ProccesorService {
             messages: messagesReq as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
             
         }) as LlmResponseDto;
-        console.log(response.choices[0].message.content);
         
         return response.choices[0].message.content;
     }
@@ -361,8 +429,9 @@ export class ProccesorService {
         const result = await this.chromRagService.search(query);
         
         if (!result) {
-            const webResult = await this.useWebRag(query);
-            return webResult;
+            // Вместо веб-рага отправляем запрос модератору
+            // Возвращаем специальный объект, который будет обработан в sendMessage
+            throw new Error('KNOWLEDGE_BASE_NOT_FOUND');
         }
         
         return result.answer;
@@ -372,9 +441,8 @@ export class ProccesorService {
         const result = await this.chromRagService.searchForPrice(serviceName);
         
         if (!result) {
-            // Если не найдено в базе цен, пробуем поиск в общей базе знаний
-            const knowledgeResult = await this.useKnowledgeBase(`сколько стоит ${serviceName}`);
-            return knowledgeResult;
+            // Если не найдено в базе цен, возвращаем сообщение для уведомления модератора
+            return `Информация о ценах на "${serviceName}" не найдена.`;
         }
 
         // Форматируем ответ в зависимости от типа результата
@@ -525,6 +593,12 @@ export class ProccesorService {
                 ? (doctor?.appointmentTypes?.primary || doctor?.duration?.primary || 60)
                 : appointmentType === 'follow_up'
                 ? (doctor?.appointmentTypes?.follow_up || doctor?.duration?.repeat || 30)
+                : appointmentType === 'ultrasound'
+                ? (doctor?.appointmentTypes?.ultrasound || doctor?.duration?.ultrasound || 30)
+                : appointmentType === 'analyses'
+                ? (doctor?.appointmentTypes?.analyses || doctor?.duration?.analyses || 15)
+                : appointmentType === 'xray'
+                ? (doctor?.appointmentTypes?.xray || doctor?.duration?.xray || 30)
                 : (doctor?.appointmentTypes?.primary || doctor?.duration?.primary || 60);
             
             // Если есть правила и расписание - проверяем ограничения
@@ -747,5 +821,19 @@ export class ProccesorService {
         }
         
         return slots;
+    }
+
+    async checkIsContinueScnene(messages: ChatMsg[]) {
+        const messagesForReq = messages.slice(0, 10);
+
+        const messagesReq = [{ role: 'system', content: checkingToExitFromScenePrompt }, { role: 'user', content: JSON.stringify(messagesForReq) }];
+
+        const response = await this.openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: messagesReq as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+            
+        }) as LlmResponseDto;
+        
+        return response.choices[0].message.content === 'continue';
     }
 }

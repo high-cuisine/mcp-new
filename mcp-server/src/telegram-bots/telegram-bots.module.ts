@@ -5,6 +5,7 @@ import { TelegramBotsUpdate } from './telegram-bots.update';
 import { RedisModule } from '@infra/redis/redis.module';
 import { ProccesorModule } from 'src/proccesor/proccesor.module';
 import { CrmModule } from 'src/crm/crm.module';
+import { ClientModule } from 'src/client/client.module';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { cfg } from '@common/config/config.service';
@@ -28,6 +29,7 @@ const session = new LocalSession();
     Mongoose.forFeature([{ name: Moderator.name, schema: ModeratorSchema }]),
     forwardRef(() => ProccesorModule),
     forwardRef(() => CrmModule),
+    ClientModule,
   ],
   providers: [TelegramBotsService, TelegramBotsUpdate],
   controllers: [TelegramBotsController],

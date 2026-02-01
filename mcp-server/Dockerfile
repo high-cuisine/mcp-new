@@ -9,14 +9,14 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 
+# Сборка NestJS (в dist/)
+RUN npm run build && \
+    npm ci --omit=dev --legacy-peer-deps && \
+    npm cache clean --force 
+
+
 # Копируем исходники
 COPY . .
-
-# Сборка NestJS (в dist/)
-RUN npm run build
-
-# Удаляем dev-зависимости после сборки
-RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
 
 ENV NODE_ENV=production
 

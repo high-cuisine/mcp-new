@@ -19,7 +19,7 @@ export type AppointmentStep =
   | 'confirmation'
   | 'completed';
 
-export type AppointmentType = 'primary' | 'secondary' | 'vaccination';
+export type AppointmentType = 'primary' | 'secondary' | 'vaccination' | 'ultrasound' | 'analyses' | 'xray';
 
 export interface AppointmentStateData {
   symptoms?: string;
@@ -53,6 +53,9 @@ export class CreateAppointmentScene {
     primary: 'Первичный прием',
     secondary: 'Вторичный прием',
     vaccination: 'Прививка',
+    ultrasound: 'УЗИ',
+    analyses: 'Анализы',
+    xray: 'Рентген',
   };
 
   private readonly logger = new Logger(CreateAppointmentScene.name);
@@ -131,7 +134,7 @@ export class CreateAppointmentScene {
         case 'appointment_type': {
           const appointmentType = this.resolveAppointmentType(trimmedMessage);
           if (!appointmentType) {
-            responses.push('Пожалуйста, выберите тип приема: 1 — первичный, 2 — вторичный, 3 — прививка.');
+            responses.push('Пожалуйста, выберите тип приема: 1 — первичный, 2 — вторичный, 3 — прививка, 4 — УЗИ, 5 — анализы, 6 — рентген.');
             return { state, responses, completed };
           }
           nextState.data.appointmentType = appointmentType;
@@ -236,6 +239,9 @@ export class CreateAppointmentScene {
                   try {
                     const appointmentType = nextState.data.appointmentType === 'primary' ? 'primary' 
                       : nextState.data.appointmentType === 'secondary' ? 'follow_up' 
+                      : nextState.data.appointmentType === 'ultrasound' ? 'ultrasound'
+                      : nextState.data.appointmentType === 'analyses' ? 'analyses'
+                      : nextState.data.appointmentType === 'xray' ? 'xray'
                       : undefined;
                     
                     const slotsText = await this.proccesorService.useDoctorAvailableSlots(
@@ -301,6 +307,9 @@ export class CreateAppointmentScene {
               try {
                 const appointmentType = nextState.data.appointmentType === 'primary' ? 'primary' 
                   : nextState.data.appointmentType === 'secondary' ? 'follow_up' 
+                  : nextState.data.appointmentType === 'ultrasound' ? 'ultrasound'
+                  : nextState.data.appointmentType === 'analyses' ? 'analyses'
+                  : nextState.data.appointmentType === 'xray' ? 'xray'
                   : undefined;
                 
                 // Извлекаем фамилию (первое слово)
@@ -506,7 +515,16 @@ export class CreateAppointmentScene {
                   typeId = 2; // Повторный прием
                   admissionLength = 30; // 30 минут
                 } else if (nextState.data.appointmentType === 'vaccination') {
-                  typeId = 3; // Прививка (если такой тип есть)
+                  typeId = 3; // Прививка
+                  admissionLength = 30; // 30 минут
+                } else if (nextState.data.appointmentType === 'ultrasound') {
+                  typeId = 4; // УЗИ
+                  admissionLength = 30; // 30 минут
+                } else if (nextState.data.appointmentType === 'analyses') {
+                  typeId = 5; // Анализы
+                  admissionLength = 15; // 15 минут
+                } else if (nextState.data.appointmentType === 'xray') {
+                  typeId = 6; // Рентген
                   admissionLength = 30; // 30 минут
                 }
 
@@ -629,7 +647,7 @@ export class CreateAppointmentScene {
   private buildOwnerNameStepResponse(ownerName: string): string[] {
     return [
       `✅ ФИО: ${ownerName}`,
-      'Выберите тип приема: 1 — первичный, 2 — вторичный, 3 — прививка.',
+      'Выберите тип приема: 1 — первичный, 2 — вторичный, 3 — прививка, 4 — УЗИ, 5 — анализы, 6 — рентген.',
     ];
   }
 
@@ -846,6 +864,18 @@ export class CreateAppointmentScene {
 
     if (['3', 'vaccination', 'прививка', 'прививкаприем'].includes(normalized)) {
       return 'vaccination';
+    }
+
+    if (['4', 'ultrasound', 'узи', 'ультразвук', 'ультразвуковое'].includes(normalized)) {
+      return 'ultrasound';
+    }
+
+    if (['5', 'analyses', 'анализы', 'анализ', 'анализкрови'].includes(normalized)) {
+      return 'analyses';
+    }
+
+    if (['6', 'xray', 'рентген', 'рентгенография', 'рентгеноскопия'].includes(normalized)) {
+      return 'xray';
     }
 
     return null;

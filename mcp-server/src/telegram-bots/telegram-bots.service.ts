@@ -35,6 +35,7 @@ import { CrmService } from 'src/crm/services/crm.service';
 import { AppointmentService } from 'src/crm/services/appointments.service';
 import { ClientService } from 'src/crm/services/client.service';
 import { DoctorService } from 'src/crm/services/doctor.service';
+import { ClientRepository } from 'src/client/repositorys/client.repository';
 import { Moderator, ModeratorDocument } from './schemas/moderator.schema';
 
 export interface HandleMessageResponse {
@@ -95,6 +96,7 @@ export class TelegramBotsService {
     private readonly appointmentService: AppointmentService,
     private readonly clientService: ClientService,
     private readonly doctorService: DoctorService,
+    private readonly clientRepository: ClientRepository,
     @InjectModel(Moderator.name) private readonly moderatorModel: Model<ModeratorDocument>,
   ) {
     this.registerScenes();
@@ -147,6 +149,40 @@ export class TelegramBotsService {
     incomingMessage: string,
     sceneState: SceneSessionState,
   ): Promise<HandleMessageResponse> {
+    // Проверяем, хочет ли пользователь выйти из сцены
+    try {
+      const user = await this.clientRepository.findByTelegramId(telegramId);
+      if (user) {
+        const userObj = user.toObject ? user.toObject() : (user as any);
+        const messages = userObj?.messages;
+        
+        if (messages && Array.isArray(messages) && messages.length > 0) {
+          // Берем последние 5 сообщений из MongoDB
+          const lastMessages = messages.slice(-5);
+          const messagesForCheck: ChatMsg[] = lastMessages.map((msg: any) => ({
+            role: msg.role === 'user' ? 'user' : 'assistant',
+            content: msg.text || msg.content || '',
+          }));
+
+          // Добавляем текущее сообщение пользователя
+          messagesForCheck.push({ role: 'user', content: incomingMessage });
+
+          // Проверяем, продолжать ли сцену
+          const shouldContinue = await this.proccesorService.checkIsContinueScnene(messagesForCheck);
+          
+          if (!shouldContinue) {
+            // Пользователь хочет выйти из сцены - очищаем состояние и обрабатываем как обычное сообщение
+            this.logger.log(`User ${telegramId} wants to exit scene "${sceneState.name}"`);
+            await this.clearSessionState(telegramId);
+            return this.handleRegularMessage(telegramId, incomingMessage);
+          }
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Error checking scene exit for ${telegramId}:`, error);
+      // В случае ошибки продолжаем обработку сцены
+    }
+
     const scene = this.scenes.get(sceneState.name);
 
     if (!scene) {
@@ -247,7 +283,7 @@ export class TelegramBotsService {
 
     let response;
     try {
-      response = await this.proccesorService.sendMessage(requestMessages);
+      response = await this.proccesorService.sendMessage(requestMessages, telegramId);
     } catch (error) {
       this.logger.error('Ошибка при обращении к LLM', error);
       return {

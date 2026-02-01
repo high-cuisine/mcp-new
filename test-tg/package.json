@@ -1,0 +1,16 @@
+{
+  "name": "test-tg-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot для отправки уведомлений + веб-форма (заглушка)",
+  "main": "index.js",
+  "scripts": {
+    "start:bot": "node index.js",
+    "start:website": "node website.js",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.64.0",
+    "express": "^4.18.2"
+  }
+}
+

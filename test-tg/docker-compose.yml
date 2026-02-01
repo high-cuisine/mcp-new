@@ -1,0 +1,29 @@
+services:
+  # Telegram бот - отправляет скриптовое сообщение
+  telegram-bot:
+    build: .
+    container_name: test-tg-bot
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    command: npm run start:bot
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    network_mode: bridge
+
+  # Веб-сайт - заглушка с формой
+  website:
+    build: .
+    container_name: test-tg-website
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "3000:3000"
+    command: npm run start:website
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    network_mode: bridge
+

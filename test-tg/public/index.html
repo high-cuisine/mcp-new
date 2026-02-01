@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Форма обратной связи</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="form-wrapper">
+            <h1>📝 Форма обратной связи</h1>
+            <p class="subtitle">Оставьте свой отзыв или комментарий</p>
+            
+            <form id="feedbackForm">
+                <div class="form-group">
+                    <label for="name">
+                        <span class="icon">👤</span>
+                        Имя
+                    </label>
+                    <input 
+                        type="text" 
+                        id="name" 
+                        name="name" 
+                        placeholder="Введите ваше имя"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="email">
+                        <span class="icon">📧</span>
+                        Email
+                    </label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        placeholder="example@mail.com"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="rating">
+                        <span class="icon">⭐</span>
+                        Оценка
+                    </label>
+                    <select id="rating" name="rating" required>
+                        <option value="">Выберите оценку</option>
+                        <option value="5">⭐⭐⭐⭐⭐ Отлично</option>
+                        <option value="4">⭐⭐⭐⭐ Хорошо</option>
+                        <option value="3">⭐⭐⭐ Нормально</option>
+                        <option value="2">⭐⭐ Плохо</option>
+                        <option value="1">⭐ Очень плохо</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="comment">
+                        <span class="icon">💬</span>
+                        Комментарий
+                    </label>
+                    <textarea 
+                        id="comment" 
+                        name="comment" 
+                        rows="5" 
+                        placeholder="Напишите ваш комментарий..."
+                        required
+                    ></textarea>
+                </div>
+
+                <button type="submit" class="submit-btn">
+                    <span class="btn-text">Отправить</span>
+                    <span class="btn-icon">📤</span>
+                </button>
+            </form>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Отправка данных...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+

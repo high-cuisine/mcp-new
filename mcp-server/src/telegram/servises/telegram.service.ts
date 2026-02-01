@@ -143,20 +143,6 @@ export class TelegramService {
                 });
             }
 
-            // Выводим в логи
-            this.logger.log('='.repeat(80));
-            this.logger.log('📄 ПОЛУЧЕН WORD ФАЙЛ');
-            this.logger.log('='.repeat(80));
-            this.logger.log(`Имя файла: ${fileName}`);
-            this.logger.log(`MIME тип: ${mimeType}`);
-            this.logger.log(`Размер файла: ${buffer.length} байт`);
-            this.logger.log('-'.repeat(80));
-            this.logger.log('СОДЕРЖИМОЕ ФАЙЛА:');
-            this.logger.log('-'.repeat(80));
-            this.logger.log(text);
-            this.logger.log('-'.repeat(80));
-            this.logger.log(`Длина текста: ${text.length} символов`);
-            this.logger.log('='.repeat(80));
 
             return {
                 success: true,
