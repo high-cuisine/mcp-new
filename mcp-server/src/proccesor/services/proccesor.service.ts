@@ -33,6 +33,12 @@ export class ProccesorService {
         return text.length > maxChars ? text.slice(0, maxChars) : text;
     }
 
+    /** Ответы «не знаю», «не найден», «нет информации» и т.п. — передаём модератору, пользователю не показываем */
+    private isNegativeResponse(text: string | undefined): boolean {
+        if (!text || !String(text).trim()) return true;
+        return /не найден|не найдена|не найдено|нет информации|не знаю|не могу сказать|нет такой информации|недоступн|не найден в системе|нет подходящей|нет данных|не могу помочь|нет доступных|записей не найдено/i.test(String(text));
+    }
+
     async getLatestClinicRules(): Promise<ClinicRulesJson | null> {
         if (!this.clinicRulesModel) return null;
         const doc = await this.clinicRulesModel.findOne().sort({ createdAt: -1 }).lean();
@@ -153,7 +159,7 @@ export class ProccesorService {
             serviceName = serviceName.replace(/\b(как|что|где|когда|можно|нужно|хочу|интересует|интересно|про|о|об|просто|только|еще|ещё|сколько|стоит|цена|стоимость|цены|на|для|у|с)\b/gi, '').trim();
             
             const priceResult = await this.usePriceSearch(serviceName);
-            if (priceResult && !/не найдена|не найдено|нет информации/i.test(priceResult)) {
+            if (priceResult && !this.isNegativeResponse(priceResult)) {
                 return { type: 'text', content: priceResult };
             }
 
@@ -215,6 +221,14 @@ export class ProccesorService {
                         notifyModerator: `❗️ Пользователь задал вопрос, требующий помощи модератора.\nЗапрос: ${query}`
                     };
                 }
+
+                if (this.isNegativeResponse(knowledgeResult)) {
+                    return {
+                        type: 'text',
+                        content: 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.',
+                        notifyModerator: `❗️ Бот не нашёл подходящего ответа в базе знаний.\nЗапрос: ${query}\nОтвет системы: ${knowledgeResult}`,
+                    };
+                }
                 
                 // Если вопрос об услугах, также ищем цены на эту услугу
                 // Определяем, является ли запрос вопросом об услуге
@@ -229,7 +243,7 @@ export class ProccesorService {
                     
                     // Ищем цену на эту услугу
                     const priceResult = await this.usePriceSearch(serviceName);
-                    if (priceResult && !/не найдена|не найдено|нет информации/i.test(priceResult)) {
+                    if (priceResult && !this.isNegativeResponse(priceResult)) {
                         return { type: 'text', content: priceResult };
                     }
                     
@@ -261,6 +275,13 @@ export class ProccesorService {
                 }
                 
                 if (isServiceQuery && !priceIntentByQuery) {
+                    if (this.isNegativeResponse(knowledgeResult)) {
+                        return {
+                            type: 'text',
+                            content: 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.',
+                            notifyModerator: notifyModeratorText(lastMessage || query),
+                        };
+                    }
                     return {
                         type: 'text',
                         content: knowledgeResult,
@@ -268,6 +289,13 @@ export class ProccesorService {
                     };
                 }
 
+                if (this.isNegativeResponse(knowledgeResult)) {
+                    return {
+                        type: 'text',
+                        content: 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.',
+                        notifyModerator: `❗️ Бот не нашёл подходящего ответа в базе знаний.\nЗапрос: ${query}`,
+                    };
+                }
                 return { type: 'text', content: knowledgeResult };
             }
             
@@ -279,6 +307,13 @@ export class ProccesorService {
                 if (!serviceHasPriceIntent) {
                     try {
                         const knowledgeResult = await this.useKnowledgeBase(serviceName || lastMessage || '');
+                        if (this.isNegativeResponse(knowledgeResult)) {
+                            return {
+                                type: 'text',
+                                content: 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.',
+                                notifyModerator: `❗️ Бот не нашёл подходящего ответа.\nЗапрос: ${serviceName || lastMessage || ''}`,
+                            };
+                        }
                         return { type: 'text', content: knowledgeResult };
                     } catch (error) {
                         // Если не найдено в базе знаний, отправляем запрос модератору
@@ -291,7 +326,7 @@ export class ProccesorService {
                 }
 
                 const priceResult = await this.usePriceSearch(serviceName);
-                if (priceResult && !/не найдена|не найдено|нет информации/i.test(priceResult)) {
+                if (priceResult && !this.isNegativeResponse(priceResult)) {
                     return { type: 'text', content: priceResult };
                 }
 
@@ -308,6 +343,13 @@ export class ProccesorService {
                 const date = args.date;
                 
                 const slotsResult = await this.useDoctorAvailableSlots(doctorName, date);
+                if (this.isNegativeResponse(slotsResult)) {
+                    return {
+                        type: 'text',
+                        content: 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.',
+                        notifyModerator: `❗️ Запрос по врачу/расписанию, бот не нашёл данных.\nЗапрос: ${lastMessage}\nОтвет системы: ${slotsResult}`,
+                    };
+                }
                 return { type: 'text', content: slotsResult };
             }
             
@@ -318,6 +360,13 @@ export class ProccesorService {
                 const appointmentType = args.appointment_type;
                 
                 const slotsResult = await this.useDoctorAvailableSlots(doctorLastName, date, appointmentType);
+                if (this.isNegativeResponse(slotsResult)) {
+                    return {
+                        type: 'text',
+                        content: 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.',
+                        notifyModerator: `❗️ Запрос по слотам/расписанию, бот не нашёл данных.\nЗапрос: ${lastMessage}\nОтвет системы: ${slotsResult}`,
+                    };
+                }
                 return { type: 'text', content: slotsResult };
             }
             
@@ -367,17 +416,27 @@ export class ProccesorService {
             return { type: functionName, content: ''}
         }
 
+        const llmContent = response.choices[0].message.content?.trim() || '';
+
+        if (this.isNegativeResponse(llmContent)) {
+            return {
+                type: 'text',
+                content: 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.',
+                notifyModerator: `❗️ Бот не смог ответить на вопрос (ответ модели помечен как негативный).\nЗапрос: ${lastMessage}\nОтвет модели: ${llmContent}`,
+            };
+        }
+
         if (isServiceQuery && !priceIntent) {
             return {
                 type: 'text',
-                content: response.choices[0].message.content,
+                content: llmContent,
                 notifyModerator: notifyModeratorText(lastMessage),
             };
         }
 
         return {
             type: 'text',
-            content: response.choices[0].message.content,
+            content: llmContent,
             notifyModerator: /буланов|буланова|расписан|график|когда начинает|во сколько|работает/i.test(lastMessage || '')
               ? notifyModeratorText(lastMessage)
               : undefined,
