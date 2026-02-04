@@ -29,7 +29,7 @@ import {
     askManagerResponse,
     getLastMessageContent,
 } from "../helpers/message.helper";
-import { detectQuickIntent, hasPriceIntent, isServiceQuery, isSymptomsOrPetProblem } from "../helpers/intent.helper";
+import { detectQuickIntent, hasPriceIntent, isServiceQuery, isSymptomsOrPetProblem, isAvailabilityQuery } from "../helpers/intent.helper";
 
 const SYMPTOMS_APPOINTMENT_SUGGESTION = '\n\nДавайте запишемся на приём — врач осмотрит питомца и даст точные рекомендации. Напишите «записаться» для записи.';
 
@@ -66,6 +66,17 @@ export class ProccesorService {
             const symptomsResult = await this.handleSymptomsOrPetProblem(lastMessage);
             if (symptomsResult) {
                 return { type: 'text', content: stripSceneNames(symptomsResult) };
+            }
+        }
+
+        if (isAvailabilityQuery(lastMessage)) {
+            try {
+                const availabilityResult = await this.knowledgeService.searchKnowledgeBaseForAvailability(lastMessage);
+                if (availabilityResult && !isNegativeResponse(availabilityResult)) {
+                    return { type: 'text', content: stripSceneNames(availabilityResult) };
+                }
+            } catch {
+                // fallback: пойдём в общий flow (LLM + tools)
             }
         }
 

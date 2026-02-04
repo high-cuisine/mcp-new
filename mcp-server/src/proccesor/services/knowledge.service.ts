@@ -32,9 +32,17 @@ export class KnowledgeService {
         return answer || dataText;
     }
 
-    /** Поиск в базе знаний + LLM для выбора релевантных позиций и формирования ответа; финальный ответ уточняется через LLM по вопросу клиента */
-    async searchKnowledgeBase(query: string): Promise<string> {
-        const candidates = await this.chromRagService.searchCandidates(query, 8, 1.4);
+    /**
+     * Общая логика: RAG-кандидаты → LLM (ragRelevance) → refineAnswerWithLlm.
+     * @param nResults — количество кандидатов из RAG
+     * @param maxDistance — порог расстояния (чем выше, тем шире выборка)
+     */
+    private async searchKnowledgeBaseInternal(
+        query: string,
+        nResults: number = 8,
+        maxDistance: number = 1.4,
+    ): Promise<string> {
+        const candidates = await this.chromRagService.searchCandidates(query, nResults, maxDistance);
         if (!candidates || candidates.length === 0) {
             throw new Error('KNOWLEDGE_BASE_NOT_FOUND');
         }
@@ -58,6 +66,16 @@ export class KnowledgeService {
         if (!rawAnswer) throw new Error('KNOWLEDGE_BASE_NOT_FOUND');
 
         return this.refineAnswerWithLlm(query, rawAnswer);
+    }
+
+    /** Поиск в базе знаний + LLM для выбора релевантных позиций и формирования ответа; финальный ответ уточняется через LLM по вопросу клиента */
+    async searchKnowledgeBase(query: string): Promise<string> {
+        return this.searchKnowledgeBaseInternal(query, 8, 1.4);
+    }
+
+    /** Поиск по вопросу о наличии чего-то: широкая выборка кандидатов из RAG, LLM формирует ответ из большего набора данных */
+    async searchKnowledgeBaseForAvailability(query: string): Promise<string> {
+        return this.searchKnowledgeBaseInternal(query, 20, 1.8);
     }
 
     /** Поиск цен на услугу в ChromRAG; ответ формируется через LLM по вопросу клиента и данным о ценах */

@@ -14,7 +14,7 @@ import {
     MODERATOR_MESSAGE,
 } from "../helpers/message.helper";
 import { parseToolArgs } from "../helpers/format.helper";
-import { isServiceQuery, hasPriceIntent } from "../helpers/intent.helper";
+import { isServiceQuery, hasPriceIntent, isAvailabilityQuery } from "../helpers/intent.helper";
 
 export type ToolCallResult = { type: string; content?: string; notifyModerator?: string };
 
@@ -99,9 +99,13 @@ export class ProcessorToolsService {
     }
 
     private async handleSearchKnowledgeBase(query: string, lastMessage: string, validMessages: ChatMsg[]): Promise<ToolCallResult> {
+        const effectiveQuery = query || lastMessage;
+        const useWiderSearch = isAvailabilityQuery(effectiveQuery);
         let knowledgeResult: string;
         try {
-            knowledgeResult = await this.knowledgeService.searchKnowledgeBase(query);
+            knowledgeResult = useWiderSearch
+                ? await this.knowledgeService.searchKnowledgeBaseForAvailability(effectiveQuery)
+                : await this.knowledgeService.searchKnowledgeBase(effectiveQuery);
         } catch {
             return askManagerResponse();
         }
@@ -109,11 +113,11 @@ export class ProcessorToolsService {
             return askManagerResponse();
         }
 
-        const isService = isServiceQuery(query);
-        const hasPrice = hasPriceIntent(query);
+        const isService = isServiceQuery(effectiveQuery);
+        const hasPrice = hasPriceIntent(effectiveQuery);
         if (isService && hasPrice) {
-            const serviceName = extractServiceName(query);
-            const priceResult = await this.knowledgeService.searchPrice(serviceName, query);
+            const serviceName = extractServiceName(effectiveQuery);
+            const priceResult = await this.knowledgeService.searchPrice(serviceName, effectiveQuery);
             if (!isNegativeResponse(priceResult)) {
                 return { type: 'text', content: stripSceneNames(priceResult) };
             }
