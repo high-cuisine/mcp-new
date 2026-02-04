@@ -11,6 +11,7 @@ export type AppointmentStep =
   | 'owner_phone'
   | 'owner_name'
   | 'appointment_type'
+  | 'appointment_type_other'
   | 'date'
   | 'time'
   | 'clinic'
@@ -19,7 +20,7 @@ export type AppointmentStep =
   | 'confirmation'
   | 'completed';
 
-export type AppointmentType = 'primary' | 'secondary' | 'vaccination' | 'ultrasound' | 'analyses' | 'xray';
+export type AppointmentType = 'primary' | 'secondary' | 'vaccination' | 'ultrasound' | 'analyses' | 'xray' | 'other';
 
 export interface AppointmentStateData {
   symptoms?: string;
@@ -28,6 +29,8 @@ export interface AppointmentStateData {
   ownerPhone?: string;
   ownerName?: string;
   appointmentType?: AppointmentType;
+  /** Произвольная причина приёма при выборе «другое» */
+  appointmentTypeOther?: string;
   date?: string;
   time?: string;
   clinic?: string;
@@ -58,7 +61,14 @@ export class CreateAppointmentScene {
     ultrasound: 'УЗИ',
     analyses: 'Анализы',
     xray: 'Рентген',
+    other: 'Другое (произвольная причина)',
   };
+
+  /** Рабочие часы для валидации времени приёма: с 08:00 по 20:00 */
+  private readonly workTimeStart = { hour: 8, minute: 0 };
+  private readonly workTimeEnd = { hour: 20, minute: 0 };
+  /** Максимум месяцев вперёд для записи */
+  private readonly maxMonthsAhead = 12;
 
   private readonly logger = new Logger(CreateAppointmentScene.name);
 
@@ -83,9 +93,10 @@ export class CreateAppointmentScene {
       pet_breed: 'Введите породу питомца (например: британская, корги).',
       owner_phone: 'Укажите номер телефона владельца в формате +7XXXXXXXXXX.',
       owner_name: 'Введите ФИО владельца (например: Иванов Иван Иванович).',
-      appointment_type: 'Выберите тип приема: 1 — первичный, 2 — вторичный, 3 — прививка, 4 — УЗИ, 5 — анализы, 6 — рентген.',
-      date: 'Введите желаемую дату приема в формате ГГГГ-ММ-ДД (например, 2024-05-20).',
-      time: 'Введите время приема в формате ЧЧ:ММ (например, 14:30).',
+      appointment_type: 'Выберите тип приема: 1 — первичный, 2 — вторичный, 3 — прививка, 4 — УЗИ, 5 — анализы, 6 — рентген, 7 — другое (произвольная причина).',
+      appointment_type_other: 'Укажите причину приёма (произвольный текст).',
+      date: 'Введите желаемую дату приема в формате ГГГГ-ММ-ДД (например, 2025-06-15). Дата не должна быть в прошлом.',
+      time: 'Введите время приема в формате ЧЧ:ММ (например, 14:30). Приём возможен с 08:00 до 20:00.',
       clinic: 'Укажите предпочитаемую клинику.',
       doctor: 'Укажите предпочитаемого врача (ФИО) или напишите «авто» для автоматического подбора.',
       slot_selection: 'Выберите доступное окно (введите номер из списка).',
@@ -100,7 +111,7 @@ export class CreateAppointmentScene {
       owner_phone: 'телефон +7XXXXXXXXXX',
       date: 'ГГГГ-ММ-ДД',
       time: 'ЧЧ:ММ',
-      appointment_type: '1-6 или primary/secondary/vaccination/ultrasound/analyses/xray',
+      appointment_type: '1-7 или primary/secondary/vaccination/ultrasound/analyses/xray/other',
     };
     return hints[step];
   }
@@ -214,13 +225,44 @@ export class CreateAppointmentScene {
         case 'appointment_type': {
           const appointmentType = this.resolveAppointmentType(effectiveMessage);
           if (!appointmentType) {
-            responses.push('Пожалуйста, выберите тип приема: 1 — первичный, 2 — вторичный, 3 — прививка, 4 — УЗИ, 5 — анализы, 6 — рентген.');
+            responses.push('Пожалуйста, выберите тип приема: 1 — первичный, 2 — вторичный, 3 — прививка, 4 — УЗИ, 5 — анализы, 6 — рентген, 7 — другое (произвольная причина).');
             return { state, responses, completed };
           }
           nextState.data.appointmentType = appointmentType;
+          if (appointmentType === 'other') {
+            nextState.step = 'appointment_type_other';
+            responses.push(`✅ Тип приема: ${this.appointmentTypeLabels.other}`);
+            responses.push('Укажите причину приёма (произвольный текст).');
+          } else {
+            nextState.step = 'doctor';
+            responses.push(...this.buildAppointmentTypeStepResponse(appointmentType));
+            try {
+              if (this.doctorService) {
+                const doctorsList = await this.buildDoctorsList();
+                if (doctorsList.length > 0) {
+                  responses.push(...doctorsList);
+                } else {
+                  responses.push('Укажите предпочитаемого врача (ФИО) или напишите «авто» для автоматического подбора.');
+                }
+              } else {
+                responses.push('Укажите предпочитаемого врача (ФИО) или напишите «авто» для автоматического подбора.');
+              }
+            } catch (error) {
+              this.logger.error(`Ошибка при получении списка врачей: ${error instanceof Error ? error.message : String(error)}`);
+              responses.push('Укажите предпочитаемого врача (ФИО) или напишите «авто» для автоматического подбора.');
+            }
+          }
+          break;
+        }
+        case 'appointment_type_other': {
+          const reason = effectiveMessage.trim();
+          if (!reason) {
+            responses.push('Пожалуйста, укажите причину приёма (произвольный текст).');
+            return { state, responses, completed };
+          }
+          nextState.data.appointmentTypeOther = reason;
           nextState.step = 'doctor';
-          responses.push(...this.buildAppointmentTypeStepResponse(appointmentType));
-          // Показываем список врачей при переходе на шаг выбора врача
+          responses.push(`✅ Причина приёма: ${reason}`);
           try {
             if (this.doctorService) {
               const doctorsList = await this.buildDoctorsList();
@@ -239,8 +281,9 @@ export class CreateAppointmentScene {
           break;
         }
         case 'date': {
-          if (!this.isValidDate(effectiveMessage)) {
-            responses.push('Введите дату в формате ГГГГ-ММ-ДД (например, 2024-05-20).');
+          const dateError = this.getDateValidationError(effectiveMessage);
+          if (dateError) {
+            responses.push(dateError);
             return { state, responses, completed };
           }
           nextState.data.date = effectiveMessage;
@@ -249,8 +292,9 @@ export class CreateAppointmentScene {
           break;
         }
         case 'time': {
-          if (!this.isValidTime(effectiveMessage)) {
-            responses.push('Введите время в формате ЧЧ:ММ (например, 14:30).');
+          const timeError = this.getTimeValidationError(effectiveMessage);
+          if (timeError) {
+            responses.push(timeError);
             return { state, responses, completed };
           }
           nextState.data.time = effectiveMessage;
@@ -317,11 +361,12 @@ export class CreateAppointmentScene {
                 // Получаем доступные окна через ProccesorService
                 if (this.proccesorService && doctorLastName) {
                   try {
-                    const appointmentType = nextState.data.appointmentType === 'primary' ? 'primary' 
-                      : nextState.data.appointmentType === 'secondary' ? 'follow_up' 
+                    const appointmentType = nextState.data.appointmentType === 'primary' ? 'primary'
+                      : nextState.data.appointmentType === 'secondary' ? 'follow_up'
                       : nextState.data.appointmentType === 'ultrasound' ? 'ultrasound'
                       : nextState.data.appointmentType === 'analyses' ? 'analyses'
                       : nextState.data.appointmentType === 'xray' ? 'xray'
+                      : nextState.data.appointmentType === 'other' ? undefined
                       : undefined;
                     
                     const slotsText = await this.proccesorService.useDoctorAvailableSlots(
@@ -390,6 +435,7 @@ export class CreateAppointmentScene {
                   : nextState.data.appointmentType === 'ultrasound' ? 'ultrasound'
                   : nextState.data.appointmentType === 'analyses' ? 'analyses'
                   : nextState.data.appointmentType === 'xray' ? 'xray'
+                  : nextState.data.appointmentType === 'other' ? undefined
                   : undefined;
 
                 // Извлекаем фамилию (первое слово)
@@ -584,8 +630,6 @@ export class CreateAppointmentScene {
                 const admissionDate = `${nextState.data.date} ${nextState.data.time}:00`;
                 const clinicId = 1; // Всегда используем клинику 1
                 const userId = nextState.data.doctorId;
-                const description = nextState.data.symptoms || 'Запись через Telegram бота';
-                
                 // Определяем type_id и admission_length
                 // Дефолтные значения: type_id=1 (первичный), admission_length=60 минут
                 let typeId = 1; // Первичный прием
@@ -606,7 +650,14 @@ export class CreateAppointmentScene {
                 } else if (nextState.data.appointmentType === 'xray') {
                   typeId = 6; // Рентген
                   admissionLength = 30; // 30 минут
+                } else if (nextState.data.appointmentType === 'other') {
+                  typeId = 1; // Первичный как база для «другое»
+                  admissionLength = 60;
                 }
+
+                const descriptionText = nextState.data.appointmentType === 'other' && nextState.data.appointmentTypeOther
+                  ? `${nextState.data.symptoms || 'Запись через Telegram бота'}. Причина: ${nextState.data.appointmentTypeOther}`
+                  : (nextState.data.symptoms || 'Запись через Telegram бота');
 
                 // 4. Создаем запись в CRM
                 await this.crmService.createAppointment(
@@ -615,7 +666,7 @@ export class CreateAppointmentScene {
                   clinicId,
                   clientId,
                   patientId,
-                  description,
+                  descriptionText,
                   admissionLength,
                   userId
                 );
@@ -727,7 +778,7 @@ export class CreateAppointmentScene {
   private buildOwnerNameStepResponse(ownerName: string): string[] {
     return [
       `✅ ФИО: ${ownerName}`,
-      'Выберите тип приема: 1 — первичный, 2 — вторичный, 3 — прививка, 4 — УЗИ, 5 — анализы, 6 — рентген.',
+      'Выберите тип приема: 1 — первичный, 2 — вторичный, 3 — прививка, 4 — УЗИ, 5 — анализы, 6 — рентген, 7 — другое (произвольная причина).',
     ];
   }
 
@@ -888,7 +939,10 @@ export class CreateAppointmentScene {
     }
 
     if (data.appointmentType) {
-      lines.push(`🩺 Тип приема: ${this.appointmentTypeLabels[data.appointmentType]}`);
+      const label = data.appointmentType === 'other' && data.appointmentTypeOther
+        ? `Другое: ${data.appointmentTypeOther}`
+        : this.appointmentTypeLabels[data.appointmentType];
+      lines.push(`🩺 Тип приема: ${label}`);
     }
 
     if (data.date && data.time) {
@@ -958,6 +1012,10 @@ export class CreateAppointmentScene {
       return 'xray';
     }
 
+    if (['7', 'other', 'другое', 'другая', 'произвольная', 'произвольный', 'иное', 'своя', 'иная'].includes(normalized)) {
+      return 'other';
+    }
+
     return null;
   }
 
@@ -979,9 +1037,54 @@ export class CreateAppointmentScene {
     );
   }
 
+  /** Валидация даты: формат + не в прошлом + не дальше maxMonthsAhead месяцев */
+  private getDateValidationError(value: string): string | null {
+    if (!this.isValidDate(value)) {
+      return 'Введите дату в формате ГГГГ-ММ-ДД (например, 2025-06-15).';
+    }
+    const match = value.match(/^(\d{4})[-.](\d{2})[-.](\d{2})$/);
+    if (!match) return 'Неверный формат даты.';
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const chosen = new Date(Date.UTC(year, month - 1, day));
+    const today = new Date();
+    const todayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    if (chosen.getTime() < todayStart.getTime()) {
+      return 'Дата не должна быть в прошлом. Введите актуальную или будущую дату в формате ГГГГ-ММ-ДД.';
+    }
+    const maxDate = new Date(today);
+    maxDate.setUTCMonth(maxDate.getUTCMonth() + this.maxMonthsAhead);
+    if (chosen.getTime() > maxDate.getTime()) {
+      return `Запись возможна не более чем на ${this.maxMonthsAhead} месяцев вперёд. Выберите более близкую дату.`;
+    }
+    return null;
+  }
+
   private isValidTime(value: string): boolean {
     const match = value.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
     return Boolean(match);
+  }
+
+  /** Валидация времени: формат + в рабочих часах (08:00–20:00) */
+  private getTimeValidationError(value: string): string | null {
+    if (!this.isValidTime(value)) {
+      return 'Введите время в формате ЧЧ:ММ (например, 14:30). Приём возможен с 08:00 до 20:00.';
+    }
+    const match = value.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+    if (!match) return null;
+    const hour = parseInt(match[1], 10);
+    const minute = parseInt(match[2], 10);
+    const minutes = hour * 60 + minute;
+    const startMinutes = this.workTimeStart.hour * 60 + this.workTimeStart.minute;
+    const endMinutes = this.workTimeEnd.hour * 60 + this.workTimeEnd.minute;
+    if (minutes < startMinutes) {
+      return `Время приёма — с ${String(this.workTimeStart.hour).padStart(2, '0')}:${String(this.workTimeStart.minute).padStart(2, '0')} до ${String(this.workTimeEnd.hour).padStart(2, '0')}:${String(this.workTimeEnd.minute).padStart(2, '0')}. Введите время не раньше 08:00.`;
+    }
+    if (minutes >= endMinutes) {
+      return `Время приёма — с 08:00 до 20:00. Введите время до 20:00.`;
+    }
+    return null;
   }
 
   private isPositiveResponse(value: string): boolean {

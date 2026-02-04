@@ -113,7 +113,7 @@ export class ProcessorToolsService {
         const hasPrice = hasPriceIntent(query);
         if (isService && hasPrice) {
             const serviceName = extractServiceName(query);
-            const priceResult = await this.knowledgeService.searchPrice(serviceName);
+            const priceResult = await this.knowledgeService.searchPrice(serviceName, query);
             if (!isNegativeResponse(priceResult)) {
                 return { type: 'text', content: stripSceneNames(priceResult) };
             }
@@ -162,7 +162,7 @@ export class ProcessorToolsService {
                 return askManagerResponse();
             }
         }
-        const priceResult = await this.knowledgeService.searchPrice(serviceName);
+        const priceResult = await this.knowledgeService.searchPrice(serviceName, lastMessage);
         if (!isNegativeResponse(priceResult)) {
             return { type: 'text', content: stripSceneNames(priceResult) };
         }

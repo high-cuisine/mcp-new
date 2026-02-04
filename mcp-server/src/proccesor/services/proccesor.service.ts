@@ -85,7 +85,7 @@ export class ProccesorService {
 
         if (serviceQuery && priceIntent && !calledPriceSearch) {
             const serviceName = extractServiceName(lastMessage);
-            const priceResult = await this.knowledgeService.searchPrice(serviceName);
+            const priceResult = await this.knowledgeService.searchPrice(serviceName, lastMessage);
             if (!isNegativeResponse(priceResult)) {
                 return { type: 'text', content: stripSceneNames(priceResult) };
             }
