@@ -11,8 +11,7 @@ import { findServicePrompt } from "../constants/helpingPrompts/findService.promp
 import { findDoctorPrompt } from "../constants/helpingPrompts/findDoctorPrompt.prompt";
 import { ServicesService } from "src/crm/services/services.service";
 import { DoctorService } from "src/crm/services/doctor.service";
-import { WebRagService } from "@infra/rag/service/web-rag.service";
-import { helpPrompt } from "../constants/help.prompt";
+import { WebSearchService } from "./web-search.service";
 import { ClinicRulesJson } from "../interface/clinic-rules-json.interface";
 import { ClinicRules, ClinicRulesDocument } from "../schemas/clinic-rules.schema";
 import { wordPrompt } from "../constants/helpingPrompts/word.prompt";
@@ -24,9 +23,8 @@ import {
     truncate,
     isNegativeResponse,
     extractServiceName,
-    buildModeratorResponse,
+    askManagerResponse,
     getLastMessageContent,
-    notifyModeratorServiceQuery,
 } from "../helpers/message.helper";
 import { detectQuickIntent, hasPriceIntent, isServiceQuery } from "../helpers/intent.helper";
 
@@ -38,10 +36,10 @@ export class ProccesorService {
     constructor(
         private readonly servicesService: ServicesService,
         private readonly doctorService: DoctorService,
-        private readonly webRagService: WebRagService,
         private readonly knowledgeService: KnowledgeService,
         private readonly processorToolsService: ProcessorToolsService,
         private readonly doctorSlotsService: DoctorSlotsService,
+        private readonly webSearchService: WebSearchService,
         @InjectModel(ClinicRules.name) private readonly clinicRulesModel: Model<ClinicRulesDocument>,
     ) {
         this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -52,7 +50,7 @@ export class ProccesorService {
         if (validMessages.length === 0) {
             throw new Error('No valid messages provided');
         }
-
+        
         const lastMessage = getLastMessageContent(validMessages);
         const quickIntent = detectQuickIntent(lastMessage);
         if (quickIntent) {
@@ -61,7 +59,7 @@ export class ProccesorService {
 
         const priceIntent = hasPriceIntent(lastMessage);
         const serviceQuery = isServiceQuery(lastMessage);
-
+        
         const messagesReq = [{ role: 'system', content: systemPrompt }, ...validMessages];
         const response = await this.openai.chat.completions.create({
             model: "gpt-4o-mini",
@@ -79,7 +77,7 @@ export class ProccesorService {
             if (!isNegativeResponse(priceResult)) {
                 return { type: 'text', content: priceResult };
             }
-            return buildModeratorResponse(notifyModeratorServiceQuery(lastMessage));
+            return askManagerResponse();
         }
 
         if (toolCalls?.length) {
@@ -94,15 +92,9 @@ export class ProccesorService {
 
         const llmContent = response.choices[0].message.content?.trim() || '';
         if (isNegativeResponse(llmContent)) {
-            return buildModeratorResponse(`❗️ Бот не смог ответить на вопрос (ответ модели помечен как негативный).\nЗапрос: ${lastMessage}\nОтвет модели: ${llmContent}`);
+            return askManagerResponse();
         }
-        if (serviceQuery && !priceIntent) {
-            return { type: 'text', content: llmContent, notifyModerator: notifyModeratorServiceQuery(lastMessage) };
-        }
-        const notifyModerator = /буланов|буланова|расписан|график|когда начинает|во сколько|работает/i.test(lastMessage)
-            ? notifyModeratorServiceQuery(lastMessage)
-            : undefined;
-        return { type: 'text', content: llmContent, notifyModerator };
+        return { type: 'text', content: llmContent };
     }
 
     async getLatestClinicRules(): Promise<ClinicRulesJson | null> {
@@ -167,15 +159,7 @@ export class ProccesorService {
     }
 
     async useWebRag(query: string) {
-        const info = await this.webRagService.search(query);
-        const webInfoText = Array.isArray(info) ? info.join('\n\n') : JSON.stringify(info);
-        const prompt = helpPrompt.replace('{web_info}', webInfoText).replace('{client_query}', query);
-        const messagesReq = [{ role: 'system', content: prompt }, { role: 'user', content: query }];
-        const response = await this.openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: messagesReq as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-        }) as LlmResponseDto;
-        return response.choices[0].message.content;
+        return this.webSearchService.search(query);
     }
 
     async useDoctorAvailableSlots(doctorName: string, date?: string, appointmentType?: string): Promise<string> {

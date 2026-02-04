@@ -4,11 +4,12 @@ import { ClientRepository } from "src/client/repositorys/client.repository";
 import { ChromRagService } from "@infra/rag/service/chrom-rag.service";
 import { KnowledgeService } from "./knowledge.service";
 import { DoctorSlotsService } from "./doctor-slots.service";
+import { WebSearchService } from "./web-search.service";
 import {
     isNegativeResponse,
     buildModeratorResponse,
+    askManagerResponse,
     extractServiceName,
-    notifyModeratorServiceQuery,
     MODERATOR_MESSAGE,
 } from "../helpers/message.helper";
 import { parseToolArgs } from "../helpers/format.helper";
@@ -29,6 +30,7 @@ export class ProcessorToolsService {
         private readonly doctorSlotsService: DoctorSlotsService,
         private readonly chromRagService: ChromRagService,
         private readonly clientRepository: ClientRepository,
+        private readonly webSearchService: WebSearchService,
     ) {}
 
     async handleToolCall(functionName: string, argsJson: string, ctx: ToolCallContext): Promise<ToolCallResult> {
@@ -36,7 +38,13 @@ export class ProcessorToolsService {
         const { lastMessage, validMessages, telegramId } = ctx;
 
         if (functionName === 'search_web') {
-            return buildModeratorResponse(`❗️ Пользователь задал вопрос, требующий помощи модератора.\nЗапрос: ${args.query}`);
+            try {
+                const query = args.query || lastMessage;
+                const content = await this.webSearchService.search(query);
+                return { type: 'text', content: content || askManagerResponse().content };
+            } catch {
+                return askManagerResponse();
+            }
         }
 
         if (functionName === 'search_knowledge_base') {
@@ -50,7 +58,7 @@ export class ProcessorToolsService {
         if (functionName === 'get_doctor_available_slots') {
             const slotsResult = await this.doctorSlotsService.getDoctorAvailableSlots(args.doctor_name, args.date);
             if (isNegativeResponse(slotsResult)) {
-                return buildModeratorResponse(`❗️ Запрос по врачу/расписанию, бот не нашёл данных.\nЗапрос: ${lastMessage}\nОтвет системы: ${slotsResult}`);
+                return askManagerResponse();
             }
             return { type: 'text', content: slotsResult };
         }
@@ -58,7 +66,7 @@ export class ProcessorToolsService {
         if (functionName === 'get_appointment_slots') {
             const slotsResult = await this.doctorSlotsService.getDoctorAvailableSlots(args.doctor_last_name, args.date, args.appointment_type);
             if (isNegativeResponse(slotsResult)) {
-                return buildModeratorResponse(`❗️ Запрос по слотам/расписанию, бот не нашёл данных.\nЗапрос: ${lastMessage}\nОтвет системы: ${slotsResult}`);
+                return askManagerResponse();
             }
             return { type: 'text', content: slotsResult };
         }
@@ -94,10 +102,10 @@ export class ProcessorToolsService {
         try {
             knowledgeResult = await this.knowledgeService.searchKnowledgeBase(query);
         } catch {
-            return buildModeratorResponse(`❗️ Пользователь задал вопрос, требующий помощи модератора.\nЗапрос: ${query}`);
+            return askManagerResponse();
         }
         if (isNegativeResponse(knowledgeResult)) {
-            return buildModeratorResponse(`❗️ Бот не нашёл подходящего ответа в базе знаний.\nЗапрос: ${query}\nОтвет системы: ${knowledgeResult}`);
+            return askManagerResponse();
         }
 
         const isService = isServiceQuery(query);
@@ -124,18 +132,18 @@ export class ProcessorToolsService {
             if (foundPrices) {
                 return { type: 'text', content: knowledgeResult + priceInfo };
             }
-            return buildModeratorResponse(notifyModeratorServiceQuery(lastMessage || query));
+            return askManagerResponse();
         }
 
         if (isService && !hasPrice) {
             if (isNegativeResponse(knowledgeResult)) {
-                return buildModeratorResponse(notifyModeratorServiceQuery(lastMessage || query));
+                return askManagerResponse();
             }
-            return { type: 'text', content: knowledgeResult, notifyModerator: notifyModeratorServiceQuery(lastMessage || query) };
+            return { type: 'text', content: knowledgeResult };
         }
 
         if (isNegativeResponse(knowledgeResult)) {
-            return buildModeratorResponse(`❗️ Бот не нашёл подходящего ответа в базе знаний.\nЗапрос: ${query}`);
+            return askManagerResponse();
         }
         return { type: 'text', content: knowledgeResult };
     }
@@ -146,17 +154,17 @@ export class ProcessorToolsService {
             try {
                 const knowledgeResult = await this.knowledgeService.searchKnowledgeBase(serviceName || lastMessage);
                 if (isNegativeResponse(knowledgeResult)) {
-                    return buildModeratorResponse(`❗️ Бот не нашёл подходящего ответа.\nЗапрос: ${serviceName || lastMessage}`);
+                    return askManagerResponse();
                 }
                 return { type: 'text', content: knowledgeResult };
             } catch {
-                return buildModeratorResponse(`❗️ Пользователь задал вопрос, требующий помощи модератора.\nЗапрос: ${serviceName || lastMessage}`);
+                return askManagerResponse();
             }
         }
         const priceResult = await this.knowledgeService.searchPrice(serviceName);
         if (!isNegativeResponse(priceResult)) {
             return { type: 'text', content: priceResult };
         }
-        return buildModeratorResponse(notifyModeratorServiceQuery(lastMessage || serviceName));
+        return askManagerResponse();
     }
 }

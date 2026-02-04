@@ -1,5 +1,8 @@
-/** Сообщение пользователю при передаче модератору */
+/** Сообщение пользователю при передаче модератору (явный вызов) */
 export const MODERATOR_MESSAGE = 'Модератор подключится к вам через пару минут и поможет с вашим вопросом.';
+
+/** Когда информации нет — спрашиваем, позвать ли менеджера (без автоматического вызова) */
+export const ASK_MANAGER_MESSAGE = 'По этому вопросу у меня нет информации. Можем позвать менеджера для уточнения — хотите? Напишите «да» или «позовите менеджера».';
 
 /** Обрезает текст до maxChars символов */
 export function truncate(text: string | undefined, maxChars: number): string {
@@ -25,13 +28,18 @@ export function notifyModeratorServiceQuery(query: string): string {
     return `❗️ Пользователь задал конкретный вопрос об услуге, но бот не нашёл данных.\nЗапрос: ${query}`;
 }
 
-/** Формирует ответ «модератор подключится» + уведомление модератору */
+/** Формирует ответ «модератор подключится» + уведомление модератору (реальный вызов) */
 export function buildModeratorResponse(notifyModerator: string): { type: 'text'; content: string; notifyModerator: string } {
     return {
         type: 'text',
         content: MODERATOR_MESSAGE,
         notifyModerator,
     };
+}
+
+/** Ответ без информации — предлагаем позвать менеджера (модератор не вызывается автоматически) */
+export function askManagerResponse(): { type: 'text'; content: string } {
+    return { type: 'text', content: ASK_MANAGER_MESSAGE };
 }
 
 /** Последнее сообщение из массива (content) */

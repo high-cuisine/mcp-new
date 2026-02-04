@@ -4,6 +4,7 @@ import { ProccesorService } from "./services/proccesor.service";
 import { KnowledgeService } from "./services/knowledge.service";
 import { DoctorSlotsService } from "./services/doctor-slots.service";
 import { ProcessorToolsService } from "./services/processor-tools.service";
+import { WebSearchService } from "./services/web-search.service";
 import { CrmModule } from "src/crm/crm.module";
 import { ClientModule } from "src/client/client.module";
 import { RagModule } from "@infra/rag/rag.module";
@@ -19,7 +20,7 @@ import { ClinicRules, ClinicRulesSchema } from "./schemas/clinic-rules.schema";
         Mongoose.forFeature([{ name: ClinicRules.name, schema: ClinicRulesSchema }]),
     ],
     controllers: [],
-    providers: [ProccesorService, KnowledgeService, DoctorSlotsService, ProcessorToolsService],
+    providers: [ProccesorService, KnowledgeService, DoctorSlotsService, ProcessorToolsService, WebSearchService],
     exports: [ProccesorService]
 })
 export class ProccesorModule {}
