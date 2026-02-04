@@ -117,6 +117,22 @@ async function main() {
         }
       } catch (error) {
         console.warn('Не удалось загрузить существующую сессию:', error.message);
+        // AUTH_KEY_DUPLICATED (406): сессия уже используется или недействительна — очищаем файл
+        const isAuthKeyDuplicated =
+          error.message && (
+            error.message.includes('AUTH_KEY_DUPLICATED') ||
+            (error.errorCode && error.errorCode === 406)
+          );
+        if (isAuthKeyDuplicated) {
+          try {
+            const backupPath = defaultSessionPath + '.old';
+            fs.copyFileSync(defaultSessionPath, backupPath);
+            fs.writeFileSync(defaultSessionPath, '', 'utf8');
+            console.warn('⚠️  Старая сессия сохранена в', backupPath, '— нужна повторная авторизация.');
+          } catch (e) {
+            console.warn('Не удалось очистить файл сессии:', e.message);
+          }
+        }
       }
     }
   }
@@ -148,7 +164,7 @@ app.post('/send-message', async (req, res) => {
 
 app.post('/auth/init', async (req, res) => {
   const { apiId, apiHash: apiHashRaw, api_hash: api_hash_raw, phoneNumber } = req.body;
-  const apiHash = typeof apiHashRaw === 'string' ? apiHashRaw : (typeof api_hash_raw === 'string' ? api_hash_raw : String(apiHashRaw || api_hash_raw || '').trim());
+  const apiHash = (typeof apiHashRaw === 'string' ? apiHashRaw : (typeof api_hash_raw === 'string' ? api_hash_raw : String(apiHashRaw || api_hash_raw || ''))).trim();
 
   if (!apiId || !apiHash || !phoneNumber) {
     return res.status(400).json({ error: 'Missing required fields: apiId, apiHash, phoneNumber' });
