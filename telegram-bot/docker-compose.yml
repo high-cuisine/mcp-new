@@ -16,6 +16,8 @@ services:
       TELEGRAM_PHONE_NUMBER: "${TELEGRAM_PHONE_NUMBER}"
       TELEGRAM_SESSION_FILE: "/data/session.txt"
     volumes:
+      # Том с сессией: session.txt из корня проекта пробрасывается в контейнер
+      - ./session.txt:/data/session.txt
       - ./data:/data
     networks:
       - telegram-network
