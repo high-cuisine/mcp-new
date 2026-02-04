@@ -147,7 +147,8 @@ app.post('/send-message', async (req, res) => {
 });
 
 app.post('/auth/init', async (req, res) => {
-  const { apiId, apiHash, phoneNumber } = req.body;
+  const { apiId, apiHash: apiHashRaw, api_hash: api_hash_raw, phoneNumber } = req.body;
+  const apiHash = typeof apiHashRaw === 'string' ? apiHashRaw : (typeof api_hash_raw === 'string' ? api_hash_raw : String(apiHashRaw || api_hash_raw || '').trim());
 
   if (!apiId || !apiHash || !phoneNumber) {
     return res.status(400).json({ error: 'Missing required fields: apiId, apiHash, phoneNumber' });
@@ -162,9 +163,10 @@ app.post('/auth/init', async (req, res) => {
 
   console.log(`[AUTH INIT] apiId: ${apiIdNumber} (type: ${typeof apiIdNumber}), apiHash: ${apiHash ? 'provided' : 'missing'}, phoneNumber: ${phoneNumber}`);
 
+  let client;
   try {
     const stringSession = new StringSession('');
-    const client = new TelegramClient(stringSession, apiIdNumber, apiHash, {
+    client = new TelegramClient(stringSession, apiIdNumber, apiHash, {
       connectionRetries: 5,
     });
 
@@ -205,13 +207,14 @@ app.post('/auth/init', async (req, res) => {
     let errorMessage = 'Failed to initialize auth';
     if (error.errorMessage === 'API_ID_INVALID') {
       errorMessage = 'API_ID_INVALID: Убедитесь, что вы используете правильный API ID. Получите его на https://my.telegram.org/apps';
+    } else if (error.message && error.message.includes('apiHash')) {
+      errorMessage = 'apiHash обязателен и должен быть строкой. Проверьте, что передаёте api_hash из https://my.telegram.org/apps';
     } else if (error.message) {
       errorMessage = error.message;
     }
     
-    // Отключаем клиент в случае ошибки
     try {
-      if (client && client.connected) {
+      if (typeof client !== 'undefined' && client && client.connected) {
         await client.disconnect();
       }
     } catch (disconnectError) {
