@@ -1,6 +1,9 @@
 import { forwardRef, Module } from "@nestjs/common";
 import { MongooseModule as Mongoose } from "@nestjs/mongoose";
 import { ProccesorService } from "./services/proccesor.service";
+import { KnowledgeService } from "./services/knowledge.service";
+import { DoctorSlotsService } from "./services/doctor-slots.service";
+import { ProcessorToolsService } from "./services/processor-tools.service";
 import { CrmModule } from "src/crm/crm.module";
 import { ClientModule } from "src/client/client.module";
 import { RagModule } from "@infra/rag/rag.module";
@@ -16,7 +19,7 @@ import { ClinicRules, ClinicRulesSchema } from "./schemas/clinic-rules.schema";
         Mongoose.forFeature([{ name: ClinicRules.name, schema: ClinicRulesSchema }]),
     ],
     controllers: [],
-    providers: [ProccesorService],
+    providers: [ProccesorService, KnowledgeService, DoctorSlotsService, ProcessorToolsService],
     exports: [ProccesorService]
 })
 export class ProccesorModule {}

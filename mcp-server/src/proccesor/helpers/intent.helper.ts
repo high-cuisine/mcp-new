@@ -1,0 +1,30 @@
+/** Результат определения намерения по последнему сообщению */
+export type IntentType = 'move_appointment' | 'cancel_appointment' | 'show_appointment' | 'create_appointment' | null;
+
+/** Определяет намерение пользователя по тексту (без вызова LLM) */
+export function detectQuickIntent(lastMessage: string): IntentType {
+    const msg = lastMessage || '';
+    if (/перенести|перенести.*запис|перенести.*прием|изменить.*время|изменить.*дату|перенести.*на.*другое/i.test(msg)) {
+        return 'move_appointment';
+    }
+    if (/отменить.*запис|отменить.*прием|удалить.*запис|отменить.*мой.*прием/i.test(msg)) {
+        return 'cancel_appointment';
+    }
+    if (/какие.*прием|мои.*запис|покажи.*прием|покажи.*запис|посмотреть.*запис|расписание.*прием/i.test(msg)) {
+        return 'show_appointment';
+    }
+    if (/записаться|записать|запись|запиши|хочу.*прием|нужно.*прием|планирую.*визит|хочу.*к.*врач|нужно.*к.*врач|давайте.*запишемся/i.test(msg)) {
+        return 'create_appointment';
+    }
+    return null;
+}
+
+/** Есть ли в сообщении запрос цены */
+export function hasPriceIntent(text: string): boolean {
+    return /цена|стоим|сколько стоит|прайс|руб|₽/i.test(text || '');
+}
+
+/** Является ли сообщение вопросом об услуге (стрижка, груминг, приём и т.д.) */
+export function isServiceQuery(text: string): boolean {
+    return /стрижк|груминг|вакцинац|прививк|кастрац|стерилиз|узи|рентген|анализ|прием|чистк|чипирован|паспорт|операц|хирург|манипуляц/i.test(text || '');
+}
