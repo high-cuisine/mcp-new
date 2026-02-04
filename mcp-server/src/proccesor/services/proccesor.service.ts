@@ -26,7 +26,9 @@ import {
     askManagerResponse,
     getLastMessageContent,
 } from "../helpers/message.helper";
-import { detectQuickIntent, hasPriceIntent, isServiceQuery } from "../helpers/intent.helper";
+import { detectQuickIntent, hasPriceIntent, isServiceQuery, isSymptomsOrPetProblem } from "../helpers/intent.helper";
+
+const SYMPTOMS_APPOINTMENT_SUGGESTION = '\n\nДавайте запишемся на приём — врач осмотрит питомца и даст точные рекомендации. Напишите «записаться» для записи.';
 
 @Injectable()
 export class ProccesorService {
@@ -55,6 +57,13 @@ export class ProccesorService {
         const quickIntent = detectQuickIntent(lastMessage);
         if (quickIntent) {
             return { type: quickIntent, content: '' };
+        }
+
+        if (isSymptomsOrPetProblem(lastMessage)) {
+            const symptomsResult = await this.handleSymptomsOrPetProblem(lastMessage);
+            if (symptomsResult) {
+                return { type: 'text', content: symptomsResult };
+            }
         }
 
         const priceIntent = hasPriceIntent(lastMessage);
@@ -95,6 +104,39 @@ export class ProccesorService {
             return askManagerResponse();
         }
         return { type: 'text', content: llmContent };
+    }
+
+    /** При симптомах/описании проблемы с питомцем: RAG + интернет, затем предложение записаться */
+    private async handleSymptomsOrPetProblem(query: string): Promise<string | null> {
+        let knowledgeText = '';
+        let webText = '';
+        try {
+            const result = await this.knowledgeService.searchKnowledgeBase(query);
+            if (result && !isNegativeResponse(result)) {
+                knowledgeText = result;
+            }
+        } catch {
+            // база знаний не ответила — используем только интернет
+        }
+        try {
+            const result = await this.webSearchService.search(query);
+            if (result && result.trim()) {
+                webText = result.trim();
+            }
+        } catch {
+            // веб-поиск не сработал
+        }
+        if (!knowledgeText && !webText) {
+            return null;
+        }
+        const parts: string[] = [];
+        if (knowledgeText) {
+            parts.push('По базе знаний клиники:\n\n' + knowledgeText);
+        }
+        if (webText) {
+            parts.push('Информация из открытых источников:\n\n' + webText);
+        }
+        return parts.join('\n\n---\n\n') + SYMPTOMS_APPOINTMENT_SUGGESTION;
     }
 
     async getLatestClinicRules(): Promise<ClinicRulesJson | null> {
