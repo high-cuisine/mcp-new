@@ -74,8 +74,9 @@ export class ConfirmAppointmentScene {
           if (result.intent === 'off_topic') {
             return {
               state: { ...state },
-              responses: [result.reply_message || CONFIRM_STEP_LABEL],
+              responses: [result.reply_message || 'Вы перешли к другой теме. Сцена завершена. Когда понадобится — напишите снова.'],
               completed: false,
+              exitScene: true,
             };
           }
           if (result.intent === 'answer' && result.validated_value) {

@@ -98,8 +98,9 @@ export class CancelAppointmentScene {
       if (validation.intent === 'off_topic') {
         return {
           state: { ...state },
-          responses: [validation.reply || 'Пожалуйста, ответьте на вопрос выше, чтобы продолжить отмену записи.'],
+          responses: [validation.reply || 'Вы перешли к другой теме. Сцена завершена. Когда понадобится — напишите снова.'],
           completed: false,
+          exitScene: true,
         };
       }
     }

@@ -170,8 +170,9 @@ export class CreateAppointmentScene {
       if (validation.intent === 'off_topic') {
         return {
           state: { ...state },
-          responses: [validation.replyMessage || 'Пожалуйста, ответьте на вопрос выше, чтобы продолжить запись.'],
+          responses: [validation.replyMessage || 'Вы перешли к другой теме. Сцена завершена. Когда будете готовы записаться — напишите «записаться».'],
           completed: false,
+          exitScene: true,
         };
       }
       // answer — используем value ниже как trimmedMessage для шага

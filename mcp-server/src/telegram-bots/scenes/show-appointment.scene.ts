@@ -90,8 +90,9 @@ export class ShowAppointmentScene {
       if (validation.intent === 'off_topic') {
         return {
           state: { ...state },
-          responses: [validation.reply || 'Пожалуйста, введите номер телефона для просмотра записей.'],
+          responses: [validation.reply || 'Вы перешли к другой теме. Сцена завершена. Когда понадобится — напишите снова.'],
           completed: false,
+          exitScene: true,
         };
       }
     }
