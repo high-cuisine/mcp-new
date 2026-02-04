@@ -7,6 +7,7 @@ import { DoctorSlotsService } from "./doctor-slots.service";
 import { WebSearchService } from "./web-search.service";
 import {
     isNegativeResponse,
+    stripSceneNames,
     buildModeratorResponse,
     askManagerResponse,
     extractServiceName,
@@ -41,7 +42,7 @@ export class ProcessorToolsService {
             try {
                 const query = args.query || lastMessage;
                 const content = await this.webSearchService.search(query);
-                return { type: 'text', content: content || askManagerResponse().content };
+                return { type: 'text', content: stripSceneNames(content || askManagerResponse().content) };
             } catch {
                 return askManagerResponse();
             }
@@ -60,7 +61,7 @@ export class ProcessorToolsService {
             if (isNegativeResponse(slotsResult)) {
                 return askManagerResponse();
             }
-            return { type: 'text', content: slotsResult };
+            return { type: 'text', content: stripSceneNames(slotsResult) };
         }
 
         if (functionName === 'get_appointment_slots') {
@@ -68,7 +69,7 @@ export class ProcessorToolsService {
             if (isNegativeResponse(slotsResult)) {
                 return askManagerResponse();
             }
-            return { type: 'text', content: slotsResult };
+            return { type: 'text', content: stripSceneNames(slotsResult) };
         }
 
         if (functionName === 'call_moderator') {
@@ -114,7 +115,7 @@ export class ProcessorToolsService {
             const serviceName = extractServiceName(query);
             const priceResult = await this.knowledgeService.searchPrice(serviceName);
             if (!isNegativeResponse(priceResult)) {
-                return { type: 'text', content: priceResult };
+                return { type: 'text', content: stripSceneNames(priceResult) };
             }
             const mainServices = ['вакцинация', 'груминг', 'прием врача', 'УЗИ', 'рентген', 'анализ крови'];
             let priceInfo = '\n\n**Цены на основные услуги:**\n';
@@ -130,7 +131,7 @@ export class ProcessorToolsService {
                 }
             }
             if (foundPrices) {
-                return { type: 'text', content: knowledgeResult + priceInfo };
+                return { type: 'text', content: stripSceneNames(knowledgeResult + priceInfo) };
             }
             return askManagerResponse();
         }
@@ -139,13 +140,13 @@ export class ProcessorToolsService {
             if (isNegativeResponse(knowledgeResult)) {
                 return askManagerResponse();
             }
-            return { type: 'text', content: knowledgeResult };
+            return { type: 'text', content: stripSceneNames(knowledgeResult) };
         }
 
         if (isNegativeResponse(knowledgeResult)) {
             return askManagerResponse();
         }
-        return { type: 'text', content: knowledgeResult };
+        return { type: 'text', content: stripSceneNames(knowledgeResult) };
     }
 
     private async handleSearchServicePrice(serviceName: string, lastMessage: string): Promise<ToolCallResult> {
@@ -156,14 +157,14 @@ export class ProcessorToolsService {
                 if (isNegativeResponse(knowledgeResult)) {
                     return askManagerResponse();
                 }
-                return { type: 'text', content: knowledgeResult };
+                return { type: 'text', content: stripSceneNames(knowledgeResult) };
             } catch {
                 return askManagerResponse();
             }
         }
         const priceResult = await this.knowledgeService.searchPrice(serviceName);
         if (!isNegativeResponse(priceResult)) {
-            return { type: 'text', content: priceResult };
+            return { type: 'text', content: stripSceneNames(priceResult) };
         }
         return askManagerResponse();
     }

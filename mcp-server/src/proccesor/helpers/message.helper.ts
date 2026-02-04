@@ -4,6 +4,19 @@ export const MODERATOR_MESSAGE = 'Модератор подключится к �
 /** Когда информации нет — спрашиваем, позвать ли менеджера (без автоматического вызова) */
 export const ASK_MANAGER_MESSAGE = 'По этому вопросу у меня нет информации. Можем позвать менеджера для уточнения — хотите? Напишите «да» или «позовите менеджера».';
 
+/** Названия сцен, которые не должны попадать в текст пользователю */
+const SCENE_NAMES = ['create_appointment', 'show_appointment', 'move_appointment', 'cancel_appointment'];
+
+/** Удаляет названия сцен из текста (например create_appointment в ответе LLM) */
+export function stripSceneNames(text: string | undefined): string {
+    if (!text) return '';
+    let out = String(text);
+    for (const name of SCENE_NAMES) {
+        out = out.replace(new RegExp(`\\s*${name}\\s*`, 'g'), ' ');
+    }
+    return out.replace(/\n{3,}/g, '\n\n').replace(/  +/g, ' ').trim();
+}
+
 /** Обрезает текст до maxChars символов */
 export function truncate(text: string | undefined, maxChars: number): string {
     if (!text) return '';

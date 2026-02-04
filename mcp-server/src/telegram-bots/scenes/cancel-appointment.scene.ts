@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { AppointmentService } from 'src/crm/services/appointments.service';
 import { ClientService } from 'src/crm/services/client.service';
 import { CrmService } from 'src/crm/services/crm.service';
+import { ProccesorService } from 'src/proccesor/services/proccesor.service';
 import { Admission } from '@common/entities/admission.entity';
 
 export type CancelAppointmentStep = 'intro' | 'phone' | 'select_appointment' | 'confirmation' | 'completed';
@@ -23,15 +24,25 @@ export interface CancelAppointmentSceneHandleResult {
   state: CancelAppointmentState;
   responses: string[];
   completed: boolean;
+  exitScene?: boolean;
 }
 
 export class CancelAppointmentScene {
   private readonly logger = new Logger(CancelAppointmentScene.name);
 
+  private readonly stepLabels: Record<CancelAppointmentStep, string> = {
+    intro: '',
+    phone: 'Введите номер телефона, на который была оформлена запись, в формате +7XXXXXXXXXX.',
+    select_appointment: 'Выберите запись для отмены (введите номер из списка).',
+    confirmation: 'Ответьте «да» для подтверждения отмены или «нет», чтобы начать заново.',
+    completed: '',
+  };
+
   constructor(
     private readonly appointmentService?: AppointmentService,
     private readonly clientService?: ClientService,
     private readonly crmService?: CrmService,
+    private readonly proccesorService?: ProccesorService,
   ) {}
 
   getInitialState(): CancelAppointmentState {
@@ -39,6 +50,22 @@ export class CancelAppointmentScene {
       step: 'intro',
       data: {},
     };
+  }
+
+  private async validateStep(state: CancelAppointmentState, message: string): Promise<{ intent: 'answer' | 'off_topic' | 'refuse'; value: string; reply: string | null } | null> {
+    if (!this.proccesorService || !message || !this.stepLabels[state.step]) return null;
+    try {
+      const result = await this.proccesorService.validateSceneStep({
+        stepId: state.step,
+        stepLabel: this.stepLabels[state.step],
+        userMessage: message,
+        formatHint: state.step === 'phone' ? 'телефон +7XXXXXXXXXX' : undefined,
+      });
+      return { intent: result.intent, value: result.validated_value ?? message, reply: result.reply_message };
+    } catch (e) {
+      this.logger.warn(`validateSceneStep failed: ${e instanceof Error ? e.message : String(e)}`);
+      return null;
+    }
   }
 
   async handleMessage(
@@ -58,6 +85,26 @@ export class CancelAppointmentScene {
       };
     }
 
+    const validation = await this.validateStep(state, trimmedMessage);
+    if (validation) {
+      if (validation.intent === 'refuse') {
+        return {
+          state: { ...state },
+          responses: [validation.reply || 'Хорошо. Если понадобится отменить запись — напишите снова.'],
+          completed: false,
+          exitScene: true,
+        };
+      }
+      if (validation.intent === 'off_topic') {
+        return {
+          state: { ...state },
+          responses: [validation.reply || 'Пожалуйста, ответьте на вопрос выше, чтобы продолжить отмену записи.'],
+          completed: false,
+        };
+      }
+    }
+    const effectiveMessage = validation?.intent === 'answer' && validation.value ? validation.value : trimmedMessage;
+
     const responses: string[] = [];
     let completed = false;
     let nextState: CancelAppointmentState = {
@@ -68,7 +115,7 @@ export class CancelAppointmentScene {
     try {
       switch (state.step) {
         case 'phone': {
-          const normalized = this.normalizePhone(trimmedMessage);
+          const normalized = this.normalizePhone(effectiveMessage);
           if (!normalized) {
             responses.push('Не удалось распознать номер телефона. Введите его в формате +7XXXXXXXXXX.');
             return { state, responses, completed };
@@ -96,7 +143,7 @@ export class CancelAppointmentScene {
         }
         case 'select_appointment': {
           const appointments = state.data.appointments || [];
-          const index = this.parseAppointmentIndex(trimmedMessage, appointments);
+          const index = this.parseAppointmentIndex(effectiveMessage, appointments);
           if (index === null) {
             responses.push('Пожалуйста, введите номер записи из списка выше.');
             responses.push(...this.buildAppointmentsListResponse(state.data.client, state.data.phone || '', appointments));
@@ -110,7 +157,7 @@ export class CancelAppointmentScene {
           break;
         }
         case 'confirmation': {
-          if (this.isPositiveResponse(trimmedMessage)) {
+          if (this.isPositiveResponse(effectiveMessage)) {
             const cancelResult = await this.cancelAppointment(nextState);
             if (cancelResult.success) {
               responses.push('✅ Запись успешно отменена!');
@@ -124,7 +171,7 @@ export class CancelAppointmentScene {
             break;
           }
 
-          if (this.isNegativeResponse(trimmedMessage)) {
+          if (this.isNegativeResponse(effectiveMessage)) {
             nextState = this.getInitialState();
             responses.push('Хорошо, начнем заново.');
             responses.push(this.buildIntroMessage());

@@ -46,6 +46,8 @@ export interface SceneHandleResult {
   state: AppointmentState;
   responses: string[];
   completed: boolean;
+  /** Выход из сцены без завершения (отказ пользователя) */
+  exitScene?: boolean;
 }
 
 export class CreateAppointmentScene {
@@ -73,6 +75,63 @@ export class CreateAppointmentScene {
     };
   }
 
+  private getStepLabel(step: AppointmentStep): string {
+    const labels: Record<AppointmentStep, string> = {
+      intro: '',
+      symptoms: 'Расскажите, пожалуйста, какие симптомы у питомца.',
+      pet_name: 'Укажите имя и вид питомца (например: Барсик, кот).',
+      pet_breed: 'Введите породу питомца (например: британская, корги).',
+      owner_phone: 'Укажите номер телефона владельца в формате +7XXXXXXXXXX.',
+      owner_name: 'Введите ФИО владельца (например: Иванов Иван Иванович).',
+      appointment_type: 'Выберите тип приема: 1 — первичный, 2 — вторичный, 3 — прививка, 4 — УЗИ, 5 — анализы, 6 — рентген.',
+      date: 'Введите желаемую дату приема в формате ГГГГ-ММ-ДД (например, 2024-05-20).',
+      time: 'Введите время приема в формате ЧЧ:ММ (например, 14:30).',
+      clinic: 'Укажите предпочитаемую клинику.',
+      doctor: 'Укажите предпочитаемого врача (ФИО) или напишите «авто» для автоматического подбора.',
+      slot_selection: 'Выберите доступное окно (введите номер из списка).',
+      confirmation: 'Если данные верны, ответьте «да» для подтверждения или «нет», чтобы начать заново.',
+      completed: '',
+    };
+    return labels[step] || '';
+  }
+
+  private getFormatHint(step: AppointmentStep): string | undefined {
+    const hints: Partial<Record<AppointmentStep, string>> = {
+      owner_phone: 'телефон +7XXXXXXXXXX',
+      date: 'ГГГГ-ММ-ДД',
+      time: 'ЧЧ:ММ',
+      appointment_type: '1-6 или primary/secondary/vaccination/ultrasound/analyses/xray',
+    };
+    return hints[step];
+  }
+
+  private async validateStepAndInterpret(
+    state: AppointmentState,
+    trimmedMessage: string,
+  ): Promise<{ intent: 'answer' | 'off_topic' | 'refuse'; value: string; replyMessage: string | null } | null> {
+    if (!this.proccesorService || !trimmedMessage) {
+      return null;
+    }
+    const stepLabel = this.getStepLabel(state.step);
+    if (!stepLabel) return null;
+    try {
+      const result = await this.proccesorService.validateSceneStep({
+        stepId: state.step,
+        stepLabel,
+        userMessage: trimmedMessage,
+        formatHint: this.getFormatHint(state.step),
+      });
+      return {
+        intent: result.intent,
+        value: result.validated_value ?? trimmedMessage,
+        replyMessage: result.reply_message ?? null,
+      };
+    } catch (e) {
+      this.logger.warn(`validateSceneStep failed: ${e instanceof Error ? e.message : String(e)}`);
+      return null;
+    }
+  }
+
   async handleMessage(state: AppointmentState, rawMessage: string): Promise<SceneHandleResult> {
     const trimmedMessage = rawMessage?.trim() ?? '';
 
@@ -87,6 +146,27 @@ export class CreateAppointmentScene {
       };
     }
 
+    const validation = await this.validateStepAndInterpret(state, trimmedMessage);
+    if (validation) {
+      if (validation.intent === 'refuse') {
+        return {
+          state: { ...state },
+          responses: [validation.replyMessage || 'Хорошо, запись отменена. Если понадобится — напишите снова.'],
+          completed: false,
+          exitScene: true,
+        };
+      }
+      if (validation.intent === 'off_topic') {
+        return {
+          state: { ...state },
+          responses: [validation.replyMessage || 'Пожалуйста, ответьте на вопрос выше, чтобы продолжить запись.'],
+          completed: false,
+        };
+      }
+      // answer — используем value ниже как trimmedMessage для шага
+    }
+    const effectiveMessage = validation?.intent === 'answer' && validation.value ? validation.value : trimmedMessage;
+
     const responses: string[] = [];
     let completed = false;
     let nextState: AppointmentState = {
@@ -97,25 +177,25 @@ export class CreateAppointmentScene {
     try {
       switch (state.step) {
         case 'symptoms': {
-          nextState.data.symptoms = trimmedMessage;
+          nextState.data.symptoms = effectiveMessage;
           nextState.step = 'pet_name';
-          responses.push(...this.buildSymptomsStepResponse(trimmedMessage));
+          responses.push(...this.buildSymptomsStepResponse(effectiveMessage));
           break;
         }
         case 'pet_name': {
-          nextState.data.petName = trimmedMessage;
+          nextState.data.petName = effectiveMessage;
           nextState.step = 'pet_breed';
-          responses.push(...this.buildPetNameStepResponse(trimmedMessage));
+          responses.push(...this.buildPetNameStepResponse(effectiveMessage));
           break;
         }
         case 'pet_breed': {
-          nextState.data.petBreed = trimmedMessage;
+          nextState.data.petBreed = effectiveMessage;
           nextState.step = 'owner_phone';
           responses.push(...this.buildPetBreedStepResponse(nextState));
           break;
         }
         case 'owner_phone': {
-          const normalized = this.normalizePhone(trimmedMessage);
+          const normalized = this.normalizePhone(effectiveMessage);
           if (!normalized) {
             responses.push('Не удалось распознать номер телефона. Введите его в формате +7XXXXXXXXXX.');
             return { state, responses, completed };
@@ -126,13 +206,13 @@ export class CreateAppointmentScene {
           break;
         }
         case 'owner_name': {
-          nextState.data.ownerName = trimmedMessage;
+          nextState.data.ownerName = effectiveMessage;
           nextState.step = 'appointment_type';
-          responses.push(...this.buildOwnerNameStepResponse(trimmedMessage));
+          responses.push(...this.buildOwnerNameStepResponse(effectiveMessage));
           break;
         }
         case 'appointment_type': {
-          const appointmentType = this.resolveAppointmentType(trimmedMessage);
+          const appointmentType = this.resolveAppointmentType(effectiveMessage);
           if (!appointmentType) {
             responses.push('Пожалуйста, выберите тип приема: 1 — первичный, 2 — вторичный, 3 — прививка, 4 — УЗИ, 5 — анализы, 6 — рентген.');
             return { state, responses, completed };
@@ -159,41 +239,41 @@ export class CreateAppointmentScene {
           break;
         }
         case 'date': {
-          if (!this.isValidDate(trimmedMessage)) {
+          if (!this.isValidDate(effectiveMessage)) {
             responses.push('Введите дату в формате ГГГГ-ММ-ДД (например, 2024-05-20).');
             return { state, responses, completed };
           }
-          nextState.data.date = trimmedMessage;
+          nextState.data.date = effectiveMessage;
           nextState.step = 'time';
-          responses.push(...this.buildDateStepResponse(trimmedMessage));
+          responses.push(...this.buildDateStepResponse(effectiveMessage));
           break;
         }
         case 'time': {
-          if (!this.isValidTime(trimmedMessage)) {
+          if (!this.isValidTime(effectiveMessage)) {
             responses.push('Введите время в формате ЧЧ:ММ (например, 14:30).');
             return { state, responses, completed };
           }
-          nextState.data.time = trimmedMessage;
-          
+          nextState.data.time = effectiveMessage;
+
           // Всегда используем клинику 1
           nextState.data.clinicId = 1;
           nextState.data.clinic = 'Клиника #1';
-                responses.push(`✅ Время приема: ${trimmedMessage}`);
-                responses.push(`✅ Клиника: ${nextState.data.clinic}`);
+          responses.push(`✅ Время приема: ${effectiveMessage}`);
+          responses.push(`✅ Клиника: ${nextState.data.clinic}`);
           nextState.step = 'confirmation';
           responses.push(...this.buildDoctorStepResponse(nextState));
           break;
         }
         case 'clinic': {
-          nextState.data.clinic = trimmedMessage;
+          nextState.data.clinic = effectiveMessage;
           nextState.step = 'confirmation';
-          responses.push(`✅ Клиника: ${trimmedMessage}`);
+          responses.push(`✅ Клиника: ${effectiveMessage}`);
           responses.push(...this.buildDoctorStepResponse(nextState));
           break;
         }
         case 'doctor': {
           // Проверяем, является ли ввод числом (выбор врача по номеру)
-          const doctorNumber = parseInt(trimmedMessage, 10);
+          const doctorNumber = parseInt(effectiveMessage, 10);
           
           if (!isNaN(doctorNumber) && this.doctorService) {
             // Пользователь выбрал врача по номеру
@@ -300,36 +380,36 @@ export class CreateAppointmentScene {
             }
           } else {
             // Пользователь ввел имя врача или "авто"
-            nextState.data.doctor = trimmedMessage;
-            
+            nextState.data.doctor = effectiveMessage;
+
             // Если введено имя врача, пытаемся получить доступные окна
-            if (trimmedMessage.toLowerCase() !== 'авто' && this.proccesorService) {
+            if (effectiveMessage.toLowerCase() !== 'авто' && this.proccesorService) {
               try {
-                const appointmentType = nextState.data.appointmentType === 'primary' ? 'primary' 
-                  : nextState.data.appointmentType === 'secondary' ? 'follow_up' 
+                const appointmentType = nextState.data.appointmentType === 'primary' ? 'primary'
+                  : nextState.data.appointmentType === 'secondary' ? 'follow_up'
                   : nextState.data.appointmentType === 'ultrasound' ? 'ultrasound'
                   : nextState.data.appointmentType === 'analyses' ? 'analyses'
                   : nextState.data.appointmentType === 'xray' ? 'xray'
                   : undefined;
-                
+
                 // Извлекаем фамилию (первое слово)
-                const doctorLastName = trimmedMessage.trim().split(/\s+/)[0] || trimmedMessage;
-                
+                const doctorLastName = effectiveMessage.trim().split(/\s+/)[0] || effectiveMessage;
+
                 const slotsText = await this.proccesorService.useDoctorAvailableSlots(
                   doctorLastName,
                   undefined,
                   appointmentType
                 );
-                
+
                 const slots = this.parseAvailableSlots(slotsText);
                 nextState.data.availableSlots = slots;
-                
+
                 if (slots.length > 0) {
-                  responses.push(`✅ Выбран врач: ${trimmedMessage}`);
+                  responses.push(`✅ Выбран врач: ${effectiveMessage}`);
                   responses.push(...this.buildSlotsList(slots));
                   nextState.step = 'slot_selection';
                 } else {
-                  responses.push(`✅ Выбран врач: ${trimmedMessage}`);
+                  responses.push(`✅ Выбран врач: ${effectiveMessage}`);
                   responses.push('К сожалению, у выбранного врача нет доступных окон для записи.');
                   nextState.step = 'date';
                   responses.push('Введите желаемую дату приема в формате ГГГГ-ММ-ДД.');
@@ -337,20 +417,20 @@ export class CreateAppointmentScene {
               } catch (error) {
                 this.logger.error(`Ошибка при получении доступных окон: ${error instanceof Error ? error.message : String(error)}`);
                 nextState.step = 'date';
-                responses.push(`✅ Выбран врач: ${trimmedMessage}`);
+                responses.push(`✅ Выбран врач: ${effectiveMessage}`);
                 responses.push('Введите желаемую дату приема в формате ГГГГ-ММ-ДД.');
               }
             } else {
               // Автоматический подбор или ProccesorService недоступен
               nextState.step = 'date';
-            responses.push(...this.buildDoctorStepResponse(nextState));
+              responses.push(...this.buildDoctorStepResponse(nextState));
               responses.push('Введите желаемую дату приема в формате ГГГГ-ММ-ДД.');
             }
           }
           break;
         }
         case 'slot_selection': {
-          const slotNumber = parseInt(trimmedMessage, 10);
+          const slotNumber = parseInt(effectiveMessage, 10);
           
           if (isNaN(slotNumber) || !nextState.data.availableSlots) {
             responses.push('Пожалуйста, введите номер окна из списка.');
@@ -383,7 +463,7 @@ export class CreateAppointmentScene {
           break;
         }
         case 'confirmation': {
-          if (this.isPositiveResponse(trimmedMessage)) {
+          if (this.isPositiveResponse(effectiveMessage)) {
             // Создаем запись в CRM
             if (this.crmService && nextState.data.ownerPhone && nextState.data.date && nextState.data.time && nextState.data.doctorId) {
               try {
@@ -564,7 +644,7 @@ export class CreateAppointmentScene {
             break;
           }
 
-          if (this.isNegativeResponse(trimmedMessage)) {
+          if (this.isNegativeResponse(effectiveMessage)) {
             nextState = this.getRestartState();
             responses.push('Хорошо, начнем заново.');
             responses.push(this.buildIntroMessage());

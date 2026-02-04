@@ -16,11 +16,14 @@ import { ClinicRulesJson } from "../interface/clinic-rules-json.interface";
 import { ClinicRules, ClinicRulesDocument } from "../schemas/clinic-rules.schema";
 import { wordPrompt } from "../constants/helpingPrompts/word.prompt";
 import { checkingToExitFromScenePrompt } from "../constants/technicalPrompt/checkingToExitFromScene.prompt";
+import { sceneStepValidationPrompt } from "../constants/technicalPrompt/sceneStepValidation.prompt";
+import { SceneStepValidationResult } from "../interface/scene-validation.interface";
 import { ProcessorToolsService, ToolCallContext } from "./processor-tools.service";
 import { KnowledgeService } from "./knowledge.service";
 import { DoctorSlotsService } from "./doctor-slots.service";
 import {
     truncate,
+    stripSceneNames,
     isNegativeResponse,
     extractServiceName,
     askManagerResponse,
@@ -62,7 +65,7 @@ export class ProccesorService {
         if (isSymptomsOrPetProblem(lastMessage)) {
             const symptomsResult = await this.handleSymptomsOrPetProblem(lastMessage);
             if (symptomsResult) {
-                return { type: 'text', content: symptomsResult };
+                return { type: 'text', content: stripSceneNames(symptomsResult) };
             }
         }
 
@@ -84,7 +87,7 @@ export class ProccesorService {
             const serviceName = extractServiceName(lastMessage);
             const priceResult = await this.knowledgeService.searchPrice(serviceName);
             if (!isNegativeResponse(priceResult)) {
-                return { type: 'text', content: priceResult };
+                return { type: 'text', content: stripSceneNames(priceResult) };
             }
             return askManagerResponse();
         }
@@ -103,7 +106,7 @@ export class ProccesorService {
         if (isNegativeResponse(llmContent)) {
             return askManagerResponse();
         }
-        return { type: 'text', content: llmContent };
+        return { type: 'text', content: stripSceneNames(llmContent) };
     }
 
     /** При симптомах/описании проблемы с питомцем: RAG + интернет, затем предложение записаться */
@@ -219,5 +222,50 @@ export class ProccesorService {
             messages: messagesReq as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
         }) as LlmResponseDto;
         return response.choices[0].message.content === 'continue';
+    }
+
+    /**
+     * Проверяет ответ клиента на шаге сцены: ответ на вопрос / офф-топик / отказ.
+     * При answer возвращает нормализованное значение для поля.
+     */
+    async validateSceneStep(params: {
+        stepId: string;
+        stepLabel: string;
+        userMessage: string;
+        formatHint?: string;
+    }): Promise<SceneStepValidationResult> {
+        const { stepId, stepLabel, userMessage, formatHint } = params;
+        const userContent = [
+            `Текущий шаг: ${stepId}`,
+            `Вопрос бота клиенту: "${stepLabel}"`,
+            formatHint ? `Ожидаемый формат: ${formatHint}` : '',
+            `Сообщение клиента: "${userMessage}"`,
+        ]
+            .filter(Boolean)
+            .join('\n');
+
+        const messagesReq = [
+            { role: 'system', content: sceneStepValidationPrompt },
+            { role: 'user', content: userContent },
+        ];
+        const response = await this.openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: messagesReq as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+        }) as LlmResponseDto;
+        const raw = response.choices[0].message.content?.trim() || '';
+        try {
+            const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+            const parsed = JSON.parse(jsonStr) as SceneStepValidationResult;
+            if (!parsed.intent || !['answer', 'off_topic', 'refuse'].includes(parsed.intent)) {
+                return { intent: 'answer', validated_value: userMessage.trim(), reply_message: null };
+            }
+            return {
+                intent: parsed.intent as SceneStepValidationResult['intent'],
+                validated_value: parsed.validated_value ?? null,
+                reply_message: parsed.reply_message ?? null,
+            };
+        } catch {
+            return { intent: 'answer', validated_value: userMessage.trim(), reply_message: null };
+        }
     }
 }

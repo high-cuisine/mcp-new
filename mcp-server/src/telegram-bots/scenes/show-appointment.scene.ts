@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { AppointmentService } from 'src/crm/services/appointments.service';
 import { ClientService } from 'src/crm/services/client.service';
+import { ProccesorService } from 'src/proccesor/services/proccesor.service';
 import { Admission } from '@common/entities/admission.entity';
 
 export type ShowAppointmentStep = 'intro' | 'phone' | 'display' | 'completed';
@@ -20,14 +21,23 @@ export interface ShowAppointmentSceneHandleResult {
   state: ShowAppointmentState;
   responses: string[];
   completed: boolean;
+  exitScene?: boolean;
 }
 
 export class ShowAppointmentScene {
   private readonly logger = new Logger(ShowAppointmentScene.name);
 
+  private readonly stepLabels: Record<ShowAppointmentStep, string> = {
+    intro: '',
+    phone: 'Введите номер телефона, на который была оформлена запись, в формате +7XXXXXXXXXX.',
+    display: '',
+    completed: '',
+  };
+
   constructor(
     private readonly appointmentService?: AppointmentService,
     private readonly clientService?: ClientService,
+    private readonly proccesorService?: ProccesorService,
   ) {}
 
   getInitialState(): ShowAppointmentState {
@@ -35,6 +45,22 @@ export class ShowAppointmentScene {
       step: 'intro',
       data: {},
     };
+  }
+
+  private async validateStep(state: ShowAppointmentState, message: string): Promise<{ intent: 'answer' | 'off_topic' | 'refuse'; value: string; reply: string | null } | null> {
+    if (!this.proccesorService || !message || !this.stepLabels[state.step]) return null;
+    try {
+      const result = await this.proccesorService.validateSceneStep({
+        stepId: state.step,
+        stepLabel: this.stepLabels[state.step],
+        userMessage: message,
+        formatHint: state.step === 'phone' ? 'телефон +7XXXXXXXXXX' : undefined,
+      });
+      return { intent: result.intent, value: result.validated_value ?? message, reply: result.reply_message };
+    } catch (e) {
+      this.logger.warn(`validateSceneStep failed: ${e instanceof Error ? e.message : String(e)}`);
+      return null;
+    }
   }
 
   async handleMessage(state: ShowAppointmentState, rawMessage: string): Promise<ShowAppointmentSceneHandleResult> {
@@ -51,6 +77,26 @@ export class ShowAppointmentScene {
       };
     }
 
+    const validation = await this.validateStep(state, trimmedMessage);
+    if (validation) {
+      if (validation.intent === 'refuse') {
+        return {
+          state: { ...state },
+          responses: [validation.reply || 'Хорошо. Если понадобится посмотреть записи — напишите снова.'],
+          completed: false,
+          exitScene: true,
+        };
+      }
+      if (validation.intent === 'off_topic') {
+        return {
+          state: { ...state },
+          responses: [validation.reply || 'Пожалуйста, введите номер телефона для просмотра записей.'],
+          completed: false,
+        };
+      }
+    }
+    const effectiveMessage = validation?.intent === 'answer' && validation.value ? validation.value : trimmedMessage;
+
     const responses: string[] = [];
     let completed = false;
     let nextState: ShowAppointmentState = {
@@ -61,7 +107,7 @@ export class ShowAppointmentScene {
     try {
       switch (state.step) {
         case 'phone': {
-          const normalized = this.normalizePhone(trimmedMessage);
+          const normalized = this.normalizePhone(effectiveMessage);
           if (!normalized) {
             responses.push('Не удалось распознать номер телефона. Введите его в формате +7XXXXXXXXXX.');
             return { state, responses, completed };

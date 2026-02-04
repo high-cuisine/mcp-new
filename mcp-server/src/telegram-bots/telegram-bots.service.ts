@@ -197,7 +197,7 @@ export class TelegramBotsService {
     
     switch (sceneState.name) {
       case 'confirm_appointment': {
-        result = (scene as ConfirmAppointmentScene).handleMessage(
+        result = await (scene as ConfirmAppointmentScene).handleMessage(
           sceneState.state as ConfirmAppointmentState,
           incomingMessage,
         );
@@ -255,7 +255,9 @@ export class TelegramBotsService {
       }
     }
 
-    if (result.completed) {
+    const exitScene =
+      'exitScene' in result && (result as { exitScene?: boolean }).exitScene === true;
+    if (result.completed || exitScene) {
       await this.clearSessionState(telegramId);
     } else {
       await this.saveSessionState(telegramId, {
@@ -445,15 +447,15 @@ export class TelegramBotsService {
 
   private registerScenes(): void {
     this.scenes.set('create_appointment', new CreateAppointmentScene(this.crmService, this.doctorService, this.proccesorService));
-    this.scenes.set('confirm_appointment', new ConfirmAppointmentScene());
+    this.scenes.set('confirm_appointment', new ConfirmAppointmentScene(this.proccesorService));
     this.scenes.set(
       'move_appointment',
-      new MoveAppointmentScene(this.crmService, this.appointmentService, this.clientService),
+      new MoveAppointmentScene(this.crmService, this.appointmentService, this.clientService, this.proccesorService),
     );
-    this.scenes.set('show_appointment', new ShowAppointmentScene(this.appointmentService, this.clientService));
+    this.scenes.set('show_appointment', new ShowAppointmentScene(this.appointmentService, this.clientService, this.proccesorService));
     this.scenes.set(
       'cancel_appointment',
-      new CancelAppointmentScene(this.appointmentService, this.clientService, this.crmService),
+      new CancelAppointmentScene(this.appointmentService, this.clientService, this.crmService, this.proccesorService),
     );
   }
 
@@ -466,7 +468,7 @@ export class TelegramBotsService {
     }
 
     const initialState = scene.getInitialState(appointmentId);
-    const result = scene.handleMessage(initialState, '');
+    const result = await scene.handleMessage(initialState, '');
 
     await this.saveSessionState(telegramId, {
       activeScene: {

@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { CrmService } from 'src/crm/services/crm.service';
 import { AppointmentService } from 'src/crm/services/appointments.service';
 import { ClientService } from 'src/crm/services/client.service';
+import { ProccesorService } from 'src/proccesor/services/proccesor.service';
 import { Admission } from '@common/entities/admission.entity';
 
 export type MoveAppointmentStep =
@@ -33,15 +34,27 @@ export interface MoveAppointmentSceneHandleResult {
   state: MoveAppointmentState;
   responses: string[];
   completed: boolean;
+  exitScene?: boolean;
 }
 
 export class MoveAppointmentScene {
   private readonly logger = new Logger(MoveAppointmentScene.name);
 
+  private readonly stepLabels: Record<MoveAppointmentStep, string> = {
+    intro: '',
+    phone: 'Введите номер телефона, на который была оформлена запись, в формате +7XXXXXXXXXX.',
+    select_appointment: 'Выберите запись для переноса (введите номер из списка).',
+    select_date: 'Введите новую дату для записи в формате ГГГГ-ММ-ДД.',
+    select_time: 'Введите время в формате ЧЧ:ММ.',
+    confirmation: 'Ответьте «да» для подтверждения переноса или «нет», чтобы начать заново.',
+    completed: '',
+  };
+
   constructor(
     private readonly crmService?: CrmService,
     private readonly appointmentService?: AppointmentService,
     private readonly clientService?: ClientService,
+    private readonly proccesorService?: ProccesorService,
   ) {}
 
   getInitialState(): MoveAppointmentState {
@@ -49,6 +62,22 @@ export class MoveAppointmentScene {
       step: 'intro',
       data: {},
     };
+  }
+
+  private async validateStep(state: MoveAppointmentState, message: string): Promise<{ intent: 'answer' | 'off_topic' | 'refuse'; value: string; reply: string | null } | null> {
+    if (!this.proccesorService || !message || !this.stepLabels[state.step]) return null;
+    try {
+      const result = await this.proccesorService.validateSceneStep({
+        stepId: state.step,
+        stepLabel: this.stepLabels[state.step],
+        userMessage: message,
+        formatHint: state.step === 'phone' ? 'телефон +7XXXXXXXXXX' : state.step === 'select_date' ? 'ГГГГ-ММ-ДД' : state.step === 'select_time' ? 'ЧЧ:ММ' : undefined,
+      });
+      return { intent: result.intent, value: result.validated_value ?? message, reply: result.reply_message };
+    } catch (e) {
+      this.logger.warn(`validateSceneStep failed: ${e instanceof Error ? e.message : String(e)}`);
+      return null;
+    }
   }
 
   async handleMessage(state: MoveAppointmentState, rawMessage: string): Promise<MoveAppointmentSceneHandleResult> {
@@ -65,6 +94,26 @@ export class MoveAppointmentScene {
       };
     }
 
+    const validation = await this.validateStep(state, trimmedMessage);
+    if (validation) {
+      if (validation.intent === 'refuse') {
+        return {
+          state: { ...state },
+          responses: [validation.reply || 'Хорошо, перенос отменён. Если понадобится — напишите снова.'],
+          completed: false,
+          exitScene: true,
+        };
+      }
+      if (validation.intent === 'off_topic') {
+        return {
+          state: { ...state },
+          responses: [validation.reply || 'Пожалуйста, ответьте на вопрос выше, чтобы продолжить перенос записи.'],
+          completed: false,
+        };
+      }
+    }
+    const effectiveMessage = validation?.intent === 'answer' && validation.value ? validation.value : trimmedMessage;
+
     const responses: string[] = [];
     let completed = false;
     let nextState: MoveAppointmentState = {
@@ -75,7 +124,7 @@ export class MoveAppointmentScene {
     try {
       switch (state.step) {
         case 'phone': {
-          const normalized = this.normalizePhone(trimmedMessage);
+          const normalized = this.normalizePhone(effectiveMessage);
           if (!normalized) {
             responses.push('Не удалось распознать номер телефона. Введите его в формате +7XXXXXXXXXX.');
             return { state, responses, completed };
@@ -98,7 +147,7 @@ export class MoveAppointmentScene {
           break;
         }
         case 'select_appointment': {
-          const appointmentIndex = this.parseAppointmentIndex(trimmedMessage, state.data.appointments || []);
+          const appointmentIndex = this.parseAppointmentIndex(effectiveMessage, state.data.appointments || []);
           if (appointmentIndex === null) {
             responses.push('Пожалуйста, введите номер записи из списка выше.');
             responses.push(...this.buildAppointmentsListResponse(state.data.appointments || [], state.data.client, state.data.phone || ''));
@@ -126,15 +175,14 @@ export class MoveAppointmentScene {
           break;
         }
         case 'select_date': {
-          if (!this.isValidDate(trimmedMessage)) {
+          if (!this.isValidDate(effectiveMessage)) {
             responses.push('Введите дату в формате ГГГГ-ММ-ДД (например, 2024-05-20).');
             return { state, responses, completed };
           }
-          // Проверяем доступность даты
           const clinicId = state.data.clinicId;
           if (clinicId) {
             const datesResult = await this.getAvailableDates(clinicId);
-            const isAvailable = datesResult.dates?.some(d => d.date === trimmedMessage);
+            const isAvailable = datesResult.dates?.some(d => d.date === effectiveMessage);
             if (!isAvailable) {
               responses.push('Выбранная дата недоступна. Пожалуйста, выберите другую дату.');
               if (datesResult.dates && datesResult.dates.length > 0) {
@@ -143,10 +191,10 @@ export class MoveAppointmentScene {
               return { state, responses, completed };
             }
           }
-          nextState.data.newDate = trimmedMessage;
+          nextState.data.newDate = effectiveMessage;
           nextState.step = 'select_time';
-          responses.push(`✅ Новая дата: ${trimmedMessage}`);
-          const timeResult = await this.getAvailableTimes(trimmedMessage, clinicId);
+          responses.push(`✅ Новая дата: ${effectiveMessage}`);
+          const timeResult = await this.getAvailableTimes(effectiveMessage, clinicId);
           if (timeResult.times && timeResult.times.length > 0) {
             responses.push(...this.buildAvailableTimesResponse(timeResult.times));
           } else {
@@ -157,16 +205,15 @@ export class MoveAppointmentScene {
           break;
         }
         case 'select_time': {
-          if (!this.isValidTime(trimmedMessage)) {
+          if (!this.isValidTime(effectiveMessage)) {
             responses.push('Введите время в формате ЧЧ:ММ (например, 14:30).');
             return { state, responses, completed };
           }
-          // Проверяем доступность времени
-          const clinicId = state.data.clinicId;
+          const clinicIdTime = state.data.clinicId;
           const date = state.data.newDate;
-          if (date && clinicId) {
-            const timeResult = await this.getAvailableTimes(date, clinicId);
-            const isAvailable = timeResult.times?.some(t => t === trimmedMessage);
+          if (date && clinicIdTime) {
+            const timeResult = await this.getAvailableTimes(date, clinicIdTime);
+            const isAvailable = timeResult.times?.some(t => t === effectiveMessage);
             if (!isAvailable) {
               responses.push('Выбранное время недоступно. Пожалуйста, выберите другое время.');
               if (timeResult.times && timeResult.times.length > 0) {
@@ -175,13 +222,13 @@ export class MoveAppointmentScene {
               return { state, responses, completed };
             }
           }
-          nextState.data.newTime = trimmedMessage;
+          nextState.data.newTime = effectiveMessage;
           nextState.step = 'confirmation';
           responses.push(...this.buildConfirmationResponse(nextState));
           break;
         }
         case 'confirmation': {
-          if (this.isPositiveResponse(trimmedMessage)) {
+          if (this.isPositiveResponse(effectiveMessage)) {
             const moveResult = await this.moveAppointment(nextState);
             if (moveResult.success) {
               responses.push('✅ Запись успешно перенесена!');
@@ -195,7 +242,7 @@ export class MoveAppointmentScene {
             break;
           }
 
-          if (this.isNegativeResponse(trimmedMessage)) {
+          if (this.isNegativeResponse(effectiveMessage)) {
             nextState = this.getInitialState();
             responses.push('Хорошо, начнем заново.');
             responses.push(this.buildIntroMessage());
