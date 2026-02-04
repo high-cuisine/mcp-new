@@ -134,7 +134,7 @@ export class ProccesorService {
             parts.push('По базе знаний клиники:\n\n' + knowledgeText);
         }
         if (webText) {
-            parts.push('Информация из открытых источников:\n\n' + webText);
+            parts.push(webText);
         }
         return parts.join('\n\n---\n\n') + SYMPTOMS_APPOINTMENT_SUGGESTION;
     }
