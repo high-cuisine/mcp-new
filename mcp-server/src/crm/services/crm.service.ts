@@ -91,19 +91,7 @@ export class CrmService {
         console.log(`[getAppointments] URL: ${url}`);
         console.log(`[getAppointments] Параметры: clinicId=${clinicId}, clientId=${clientId}, startDate=${startDate}, endDate=${endDate}`);
       
-        const response = await fetch(url, {
-            headers: {
-                'Content-Type': 'application/json',
-                'X-REST-API-KEY': process.env.CRM_API_KEY || ''
-            },
-            method: 'GET'
-        });
-        
-        if (!response.ok) {
-            throw new Error(`Failed to GET ${url}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
+        const data = await this.handleRequest(url, {}, 'GET');
         
         console.log(`[getAppointments] Получено записей от API: ${data?.data?.admission?.length || 0}`);
         console.log(`[getAppointments] Первые 3 записи:`, data?.data?.admission?.slice(0, 3).map((a: any) => ({

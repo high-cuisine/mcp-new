@@ -78,34 +78,43 @@ export class WebRagService implements OnModuleInit {
       }
     }
     
-    try {
-      const response = await fetch(absoluteUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-        redirect: 'follow'
-      });
-      
-      const html = await response.text();
-      const $ = cheerio.load(html);
-      
-      // Remove script and style elements
-      $('script, style, noscript, iframe').remove();
-      
-      // Get text content and clean it up
-      let text = $('body').text() || $.text();
-      
-      // Clean up whitespace
-      text = text.replace(/\s+/g, ' ').trim();
-      text = text.replace(/\n\s*\n/g, '\n');
-      
-      return text;
-    } catch (error) {
-      console.error(`Error scraping ${absoluteUrl}:`, error);
-      return '';
+    const isRetryable = (err: any) =>
+      err?.code === 'ECONNRESET' || err?.code === 'ETIMEDOUT' || err?.errno === 'ECONNRESET';
+
+    const SCRAPE_TIMEOUT_MS = 12_000;
+
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), SCRAPE_TIMEOUT_MS);
+      try {
+        const response = await fetch(absoluteUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+          },
+          redirect: 'follow',
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        const html = await response.text();
+        const $ = cheerio.load(html);
+
+        $('script, style, noscript, iframe').remove();
+        let text = $('body').text() || $.text();
+        text = text.replace(/\s+/g, ' ').trim();
+        text = text.replace(/\n\s*\n/g, '\n');
+        return text;
+      } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (attempt < 2 && isRetryable(error)) {
+          continue;
+        }
+        console.warn(`Scraping failed for ${absoluteUrl}: ${error?.code || error?.message}. Returning empty.`);
+        return '';
+      }
     }
+    return '';
   }
 
   

@@ -21,6 +21,7 @@ import { SceneStepValidationResult } from "../interface/scene-validation.interfa
 import { ProcessorToolsService, ToolCallContext } from "./processor-tools.service";
 import { KnowledgeService } from "./knowledge.service";
 import { DoctorSlotsService } from "./doctor-slots.service";
+import { CheckListService } from "@infra/rag/service/check-list.service";
 import {
     truncate,
     stripSceneNames,
@@ -28,8 +29,9 @@ import {
     extractServiceName,
     askManagerResponse,
     getLastMessageContent,
+    MODERATOR_MESSAGE,
 } from "../helpers/message.helper";
-import { detectQuickIntent, hasPriceIntent, isServiceQuery, isSymptomsOrPetProblem, isAvailabilityQuery } from "../helpers/intent.helper";
+import { detectQuickIntent, hasPriceIntent, isServiceQuery, isSymptomsOrPetProblem, isAvailabilityQuery, isOperatorRequired, getOperatorRequiredReason } from "../helpers/intent.helper";
 
 const SYMPTOMS_APPOINTMENT_SUGGESTION = '\n\nДавайте запишемся на приём — врач осмотрит питомца и даст точные рекомендации. Напишите «записаться» для записи.';
 
@@ -45,6 +47,7 @@ export class ProccesorService {
         private readonly processorToolsService: ProcessorToolsService,
         private readonly doctorSlotsService: DoctorSlotsService,
         private readonly webSearchService: WebSearchService,
+        private readonly checkListService: CheckListService,
         @InjectModel(ClinicRules.name) private readonly clinicRulesModel: Model<ClinicRulesDocument>,
     ) {
         this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -60,6 +63,13 @@ export class ProccesorService {
         const quickIntent = detectQuickIntent(lastMessage);
         if (quickIntent) {
             return { type: quickIntent, content: '' };
+        }
+
+        // Приоритет: при признаках 4.1–4.6 передаём диалог оператору; клиенту — только что модератор скоро подключится
+        if (isOperatorRequired(lastMessage)) {
+            const reason = getOperatorRequiredReason(lastMessage);
+            const moderatorMessage = `🔔 ВЫЗОВ МОДЕРАТОРА\n\nПричина: ${reason}\n\nПоследнее сообщение клиента: "${lastMessage}"${telegramId ? `\n\nTelegram ID: ${telegramId}` : ''}`;
+            return { type: 'text', content: MODERATOR_MESSAGE, notifyModerator: moderatorMessage };
         }
 
         if (isSymptomsOrPetProblem(lastMessage)) {
@@ -120,18 +130,31 @@ export class ProccesorService {
         return { type: 'text', content: stripSceneNames(llmContent) };
     }
 
-    /** При симптомах/описании проблемы с питомцем: RAG + интернет, затем предложение записаться */
+    /** При симптомах/описании проблемы: сначала типовые вопросы (RAG); при отсутствии — chech-list.csv и предложение записи; иначе RAG + веб + предложение записи */
     private async handleSymptomsOrPetProblem(query: string): Promise<string | null> {
         let knowledgeText = '';
-        let webText = '';
         try {
             const result = await this.knowledgeService.searchKnowledgeBase(query);
             if (result && !isNegativeResponse(result)) {
                 knowledgeText = result;
             }
         } catch {
-            // база знаний не ответила — используем только интернет
+            // в типовых вопросах жалобы нет — пробуем chech-list
         }
+
+        // При отсутствии в типовых вопросах — ищем в chech-list.csv и предлагаем запись по нему
+        if (!knowledgeText) {
+            const match = this.checkListService.findMatch(query);
+            if (match) {
+                return (
+                    `По вашим словам подойдёт: **${match.serviceName}**. Тип визита: ${match.visitType}. Врач: ${match.doctorType}.` +
+                    SYMPTOMS_APPOINTMENT_SUGGESTION
+                );
+            }
+        }
+
+        // Есть ответ из базы знаний — добавляем веб при необходимости и предлагаем запись
+        let webText = '';
         try {
             const result = await this.webSearchService.search(query);
             if (result && result.trim()) {

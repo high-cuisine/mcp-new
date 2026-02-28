@@ -13,6 +13,14 @@ export class RedisService {
         return await this.redisClient.set(key, value, 'EX', options?.EX ?? 0);
     }
 
+    async zadd(key: string, score: number, member: string) {
+        return await this.redisClient.zadd(key, score, member);
+    }
+
+    async zrangeWithScores(key: string, start = 0, stop = -1) {
+        return await this.redisClient.zrange(key, start, stop, 'WITHSCORES');
+    }
+
     async delete(key: string) {
         return await this.redisClient.del(key);
     }
@@ -27,5 +35,13 @@ export class RedisService {
 
     async getSet(key: string) {
         return await this.redisClient.smembers(key);
+    }
+
+    async hset(key: string, field: string, value: string) {
+        return await this.redisClient.hset(key, field, value);
+    }
+
+    async hgetall(key: string) {
+        return await this.redisClient.hgetall(key);
     }
 }

@@ -7,27 +7,27 @@ import {
   AppointmentState,
   CreateAppointmentScene,
   SceneHandleResult,
-} from './scenes/create-appointment.scene';
+} from './scenes/create-appointment';
 import {
   ConfirmAppointmentState,
   ConfirmAppointmentScene,
   ConfirmAppointmentSceneHandleResult,
-} from './scenes/confirm-appointment.scene';
+} from './scenes/confirm-appointment';
 import {
   MoveAppointmentState,
   MoveAppointmentScene,
   MoveAppointmentSceneHandleResult,
-} from './scenes/move-appointment.scene';
+} from './scenes/move-appointment';
 import {
   ShowAppointmentState,
   ShowAppointmentScene,
   ShowAppointmentSceneHandleResult,
-} from './scenes/show-appointment.scene';
+} from './scenes/show-appointment';
 import {
   CancelAppointmentState,
   CancelAppointmentScene,
   CancelAppointmentSceneHandleResult,
-} from './scenes/cancel-appointment.scene';
+} from './scenes/cancel-appointment';
 import { ProccesorService } from 'src/proccesor/services/proccesor.service';
 import { ChatMsg } from 'src/proccesor/interface/chat.interface';
 import { cfg } from '@common/config/config.service';
@@ -40,6 +40,8 @@ import { Moderator, ModeratorDocument } from './schemas/moderator.schema';
 
 export interface HandleMessageResponse {
   messages: string[];
+  /** Уведомление для модераторов (лист ожидания, вызов оператора и т.п.) */
+  notifyModerator?: string;
 }
 
 type SceneStateUnion =
@@ -268,10 +270,15 @@ export class TelegramBotsService {
       });
     }
 
+    if ('notifyModerator' in result && (result as { notifyModerator?: string }).notifyModerator) {
+      await this.notifyModerators((result as { notifyModerator: string }).notifyModerator);
+    }
+
     return {
       messages: result.responses.length
         ? result.responses
         : ['Я вас не расслышал. Повторите, пожалуйста.'],
+      notifyModerator: 'notifyModerator' in result ? (result as { notifyModerator?: string }).notifyModerator : undefined,
     };
   }
 

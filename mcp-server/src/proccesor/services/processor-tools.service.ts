@@ -15,6 +15,7 @@ import {
 } from "../helpers/message.helper";
 import { parseToolArgs } from "../helpers/format.helper";
 import { isServiceQuery, hasPriceIntent, isAvailabilityQuery } from "../helpers/intent.helper";
+import { CLINIC_DOCTORS } from "../constants/doctors-info.constant";
 
 export type ToolCallResult = { type: string; content?: string; notifyModerator?: string };
 
@@ -70,6 +71,16 @@ export class ProcessorToolsService {
                 return askManagerResponse();
             }
             return { type: 'text', content: stripSceneNames(slotsResult) };
+        }
+
+        if (functionName === 'get_clinic_working_hours') {
+            const content = this.buildClinicScheduleForWeek();
+            return { type: 'text', content };
+        }
+
+        if (functionName === 'get_doctor_info') {
+            const content = this.buildDoctorInfoResponse(args.doctor_name?.trim() || '');
+            return { type: 'text', content };
         }
 
         if (functionName === 'call_moderator') {
@@ -171,5 +182,55 @@ export class ProcessorToolsService {
             return { type: 'text', content: stripSceneNames(priceResult) };
         }
         return askManagerResponse();
+    }
+
+    /** График на ближайшие 7 дней: текущая дата + часы работы по правилам клиники */
+    private buildClinicScheduleForWeek(): string {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const dayNames = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+        const lines: string[] = [];
+        const dateFmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+        lines.push(`Текущая дата: ${dateFmt(today)}.`);
+        lines.push('');
+        lines.push('График на ближайшую неделю:');
+        lines.push('');
+
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(today);
+            d.setDate(d.getDate() + i);
+            const month = d.getMonth(), day = d.getDate(), weekday = d.getDay();
+            const isJan1 = month === 0 && day === 1;
+            const isSecondTuesday = weekday === 2 && day >= 8 && day <= 14;
+            let hours: string;
+            if (isJan1) hours = 'клиника не работает';
+            else if (isSecondTuesday) hours = '14:00 – 21:00';
+            else hours = '09:00 – 21:00';
+            const dayLabel = dayNames[weekday];
+            lines.push(`${dateFmt(d)} (${dayLabel}): ${hours}`);
+        }
+
+        lines.push('');
+        lines.push('Ограничения по приёму: первичный приём — до 20:00 (в 20:00 можно записаться последним); повторные приёмы, вакцинация, стрижка когтей и другие мелкие процедуры — до 20:30.');
+
+        return lines.join('\n');
+    }
+
+    /** Информация о врачах: список фамилий или карточка конкретного врача */
+    private buildDoctorInfoResponse(doctorQuery: string): string {
+        const query = doctorQuery.toLowerCase().replace(/\s+/g, ' ').trim();
+
+        if (query) {
+            const found = CLINIC_DOCTORS.find((d) =>
+                d.searchNames.some((name) => query.includes(name)),
+            );
+            if (found) {
+                return found.card;
+            }
+        }
+
+        const list = CLINIC_DOCTORS.map((d) => `• ${d.fullName}`).join('\n');
+        return `Врачи клиники:\n\n${list}\n\nМожете спросить про любого врача по фамилии — расскажу подробнее.`;
     }
 }

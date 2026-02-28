@@ -132,7 +132,9 @@ export class ChromRagInitService implements OnModuleInit {
             return;
         }
 
-        const files = fs.readdirSync(directory).filter(file => file.endsWith('.csv') && !file.includes('structured_price_list'));
+        const files = fs.readdirSync(directory).filter(file =>
+            file.endsWith('.csv') && !file.includes('structured_price_list') && !file.includes('chech-list')
+        );
         
         if (files.length === 0) {
             console.warn(`No CSV files found in ${directory}`);

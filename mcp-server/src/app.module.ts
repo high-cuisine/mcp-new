@@ -8,6 +8,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { TelegramBotsModule } from './telegram-bots/telegram-bots.module';
 import { WhatsappBotsModule } from './whatsapp-bots/whatsapp-bots.module';
 import { RagModule } from '@infra/rag/rag.module';
+import { DocumentParser } from '@infra/documentParser/documentParser.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { RagModule } from '@infra/rag/rag.module';
     TelegramBotsModule,
     WhatsappBotsModule,
     RagModule,
+    DocumentParser
   ],
   controllers: [],
   providers: [],

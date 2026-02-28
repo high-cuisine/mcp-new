@@ -56,7 +56,12 @@ export class DoctorService {
                             appointments: appointments || []
                         };
                     } catch (error) {
-                        console.error(`Ошибка при получении записей для врача ${doctor.id}:`, error);
+                        const msg = error instanceof Error ? error.message : String(error);
+                        if (msg.includes('timeout') || msg.includes('Timeout')) {
+                            console.warn(`CRM: таймаут при получении записей для врача ${doctor.id}, подставляем пустой список`);
+                        } else {
+                            console.error(`Ошибка при получении записей для врача ${doctor.id}:`, msg);
+                        }
                         return {
                             ...doctor,
                             appointments: []

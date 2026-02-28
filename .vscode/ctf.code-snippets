@@ -1,0 +1,38 @@
+{
+  "CTF: Session Analysis": {
+    "prefix": "ctf-session",
+    "body": [
+      "# Анализ сессии",
+      "connect.sid = '${1:session_value}'",
+      "JSESSIONID = '${2:jsession_value}'",
+      "",
+      "# Возможные атаки:",
+      "# 1. Signature forgery",
+      "# 2. Session prediction",
+      "# 3. Session confusion",
+      "# 4. Race condition"
+    ],
+    "description": "Шаблон для анализа CTF-сессий (connect.sid, JSESSIONID)"
+  },
+  "CTF: Brute Force Script": {
+    "prefix": "ctf-bruteforce",
+    "body": [
+      "#!/usr/bin/env python3",
+      "import requests",
+      "import sys",
+      "",
+      "TARGET = '${1:https://target.com}'",
+      "BASE_SESSION = '${2:session_id}'",
+      "",
+      "def test_session(sid):",
+      "    cookies = {'connect.sid': sid}",
+      "    r = requests.get(f'{TARGET}/api/auth/me', cookies=cookies)",
+      "    return r.status_code == 200",
+      "",
+      "for i in range(${3:100}):",
+      "    # [логика брутфорса]",
+      "    pass"
+    ],
+    "description": "Заготовка скрипта брутфорса сессий для CTF"
+  }
+}
