@@ -5,9 +5,12 @@ WORKDIR /app
 # Избегаем скачивания Chromium для puppeteer (arm64 + Alpine)
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
-# Копируем файлы зависимостей и устанавливаем все зависимости (включая dev для сборки)
-COPY package*.json ./
-RUN npm ci --legacy-peer-deps
+# Для нативных модулей (если появятся) — раскомментировать:
+# RUN apk add --no-cache python3 make g++
+
+# Копируем только lock-файлы — установка строго по lock (воспроизводимо)
+COPY package.json package-lock.json ./
+RUN npm ci
 
 # Копируем исходники (до сборки!)
 COPY . .

@@ -34,7 +34,7 @@ services:
       - TELEGRAM_HOST=http://telegram-userbot:3507
       - WHATSAPP_HOST=http://wa-bot:6800
   mongo:
-    image: mongo:latest
+    image: mongo:4.4
     ports:
       - 27017:27017
     environment:
@@ -45,7 +45,7 @@ services:
     networks:
       - telegram-network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "--quiet"]
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')", "--quiet"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -82,4 +82,4 @@ services:
 networks:
   telegram-network:
     name: telegram-network
-    driver: bridge
+    external: true
