@@ -103,7 +103,9 @@ async function main() {
         if (apiId && apiHash) {
           const client = new TelegramClient(new StringSession(storedSession), apiId, apiHash, {
             connectionRetries: 5,
-            useWSS: true,
+            // WSS часто блокируется/обрывается в сетях с прокси/фаерволом.
+            // Для диагностики отключаем и используем обычный TCP-транспорт.
+            useWSS: false,
             autoReconnect: true,
           });
 
@@ -272,7 +274,7 @@ app.post('/auth/verify-code', async (req, res) => {
     
     const activeClientInstance = new TelegramClient(new StringSession(session), authSession.apiId, authSession.apiHash, {
       connectionRetries: 5,
-      useWSS: true,
+      useWSS: false,
       autoReconnect: true,
     });
 
@@ -334,7 +336,7 @@ app.post('/auth/verify-password', async (req, res) => {
     
     const activeClientInstance = new TelegramClient(new StringSession(session), authSession.apiId, authSession.apiHash, {
       connectionRetries: 5,
-      useWSS: true,
+      useWSS: false,
       autoReconnect: true,
     });
 
